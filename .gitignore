@@ -1,0 +1,66 @@
+# Dependências
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
+
+# Build e distribuição
+dist/
+build/
+release/
+*.exe
+*.dmg
+*.app
+*.deb
+*.rpm
+*.snap
+
+# Arquivos de ambiente
+.env
+.env.local
+.env.*.local
+
+# Arquivos do sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs e crashes
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Diretórios de IDE/Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*.swn
+*.bak
+*.sublime-workspace
+*.sublime-project
+
+# Cache
+.cache/
+.temp/
+.tmp/
+coverage/
+
+# Electron específico
+out/
+app/dist/
+.webpack/
+
+# Arquivos temporários
+tmp/
+temp/
+
+# Arquivos de teste
+coverage/
+.nyc_output/ 

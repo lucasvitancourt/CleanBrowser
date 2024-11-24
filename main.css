@@ -1,0 +1,92 @@
+/* Mantenha apenas os estilos do menu de ferramentas */
+.tools-dropdown {
+    position: relative;
+}
+
+.tools-menu {
+    display: none;
+    position: absolute;
+    top: 100%;
+    right: 0;
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px var(--shadow-color);
+    padding: 4px;
+    min-width: 200px;
+    z-index: 1000;
+    margin-top: 4px;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+/* Adicionar área de tolerância */
+.tools-menu::before {
+    content: '';
+    position: absolute;
+    top: -20px;
+    left: -20px;
+    right: -20px;
+    height: 20px;
+}
+
+.tools-menu.active {
+    display: block;
+    animation: menuFadeIn 0.3s ease;
+    opacity: 1;
+    visibility: visible;
+}
+
+/* Estilos para modo anônimo */
+.incognito-mode {
+    --primary-color: #9B6DFF;
+    --background-color: #1A1B2E;
+    --surface-color: #242640;
+    --border-color: #2F3152;
+}
+
+.incognito-indicator {
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    -webkit-app-region: drag;
+    height: 100%;
+}
+
+/* Estilo especial para o botão de modo anônimo */
+#incognito.tool-item {
+    color: #9B6DFF;
+}
+
+#incognito.tool-item:hover {
+    background: rgba(155, 109, 255, 0.1);
+}
+
+/* Ajustes visuais para janela anônima */
+.incognito-mode .titlebar {
+    background: rgba(26, 27, 46, 0.95);
+}
+
+.incognito-mode .tab {
+    background: var(--surface-color);
+}
+
+.incognito-mode .tab.active {
+    border-color: var(--primary-color);
+}
+
+/* Animação mais suave */
+@keyframes menuFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-5px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+ 

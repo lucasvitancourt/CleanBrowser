@@ -1,0 +1,74 @@
+:root[data-theme="purple"] {
+    --primary-color: #9B6DFF;
+    --primary-color-hover: #8A5CE8;
+    --primary-shadow: rgba(155, 109, 255, 0.3);
+    --background-color: #1A1B2E;
+    --surface-color: #242640;
+    --border-color: #2F3152;
+    --text-color: #E2E2FF;
+    --text-secondary: #9D9DC6;
+    --shadow-color: rgba(155, 109, 255, 0.2);
+    --titlebar-bg: rgba(26, 27, 46, 0.95);
+    --titlebar-border: #2F3152;
+    --control-hover: rgba(155, 109, 255, 0.15);
+    --control-active: rgba(155, 109, 255, 0.25);
+    --url-bar-bg: #242640;
+    --url-bar-text: #E2E2FF;
+    --url-bar-border: #2F3152;
+    --url-bar-focus-bg: #2A2C4A;
+    --modal-bg: #242640;
+    --modal-overlay: rgba(26, 27, 46, 0.8);
+    --modal-border: #2F3152;
+    --button-primary-text: #ffffff;
+    --button-secondary-bg: #2A2C4A;
+    --button-secondary-text: #E2E2FF;
+    --tab-active-bg: #2A2C4A;
+    --tab-hover-bg: rgba(155, 109, 255, 0.1);
+    --tab-border-active: #9B6DFF;
+    --notification-bg: linear-gradient(45deg, #9B6DFF, #8A5CE8);
+    --scrollbar-thumb: #9B6DFF;
+    --scrollbar-track: #242640;
+}
+
+[data-theme="purple"] .tab.active {
+    background: var(--tab-active-bg);
+    border-color: var(--tab-border-active);
+    box-shadow: 0 2px 8px var(--shadow-color);
+}
+
+[data-theme="purple"] .url-bar {
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="purple"] .url-bar:focus {
+    box-shadow: 0 0 0 2px var(--primary-shadow);
+}
+
+[data-theme="purple"] .notification {
+    background: var(--notification-bg);
+}
+
+[data-theme="purple"] ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+[data-theme="purple"] ::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 4px;
+}
+
+[data-theme="purple"] ::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+}
+
+[data-theme="purple"] .control-button:hover {
+    background: var(--control-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px var(--shadow-color);
+}
+
+[data-theme="purple"] .settings-modal {
+    backdrop-filter: blur(10px);
+    box-shadow: 0 8px 32px rgba(155, 109, 255, 0.2);
+} 

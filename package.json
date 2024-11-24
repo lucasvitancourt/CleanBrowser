@@ -1,0 +1,19 @@
+{
+  "name": "clean-browser",
+  "version": "1.0.0",
+  "description": "Um navegador desktop minimalista",
+  "main": "main.js",
+  "author": "Seu Nome",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win --config electron-builder.config.js",
+    "build:installer": "electron-builder --win nsis --config electron-builder.config.js"
+  },
+  "dependencies": {
+    "electron-store": "^8.1.0"
+  },
+  "devDependencies": {
+    "electron": "^29.1.4",
+    "electron-builder": "^24.13.3"
+  }
+}

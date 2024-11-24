@@ -1,0 +1,35 @@
+:root[data-theme="dark"] {
+    --primary-color: #0A84FF;
+    --primary-color-hover: #0071E3;
+    --primary-shadow: rgba(10, 132, 255, 0.3);
+    --background-color: #1c1c1e;
+    --surface-color: #2c2c2e;
+    --border-color: #3c3c3e;
+    --text-color: #ffffff;
+    --text-secondary: #8e8e93;
+    --shadow-color: rgba(0, 0, 0, 0.3);
+    
+    /* Titlebar */
+    --titlebar-bg: rgba(28, 28, 30, 0.95);
+    --titlebar-border: #3c3c3e;
+    
+    /* Controls */
+    --control-hover: rgba(255, 255, 255, 0.1);
+    --control-active: rgba(255, 255, 255, 0.15);
+    
+    /* URL Bar */
+    --url-bar-bg: #2c2c2e;
+    --url-bar-text: #ffffff;
+    --url-bar-border: #3c3c3e;
+    --url-bar-focus-bg: #3c3c3e;
+    
+    /* Modal */
+    --modal-bg: #2c2c2e;
+    --modal-overlay: rgba(0, 0, 0, 0.7);
+    --modal-border: #3c3c3e;
+    
+    /* Buttons */
+    --button-primary-text: #ffffff;
+    --button-secondary-bg: #3c3c3e;
+    --button-secondary-text: #ffffff;
+} 
