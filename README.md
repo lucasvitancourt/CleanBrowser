@@ -4,7 +4,7 @@
 Um navegador web leve, rápido com foco em ser simples e bonito, construído com Electron.
 
 <p align="center">
-  <img src="./screenshots/main.png" alt="Clean Browser Interface" width="800"/>
+  <img src="./screenshots/print.png" alt="Clean Browser Interface" width="800"/>
 </p>
 
 
@@ -93,8 +93,8 @@ Um navegador web leve, rápido com foco em ser simples e bonito, construído com
 ## 📸 **Screenshots**
 
 <p align="center">
-  <img src="./screenshots/themes.png" alt="Temas" width="400"/>
-  <img src="./screenshots/features.png" alt="Funcionalidades" width="400"/>
+  <img src="./screenshots/prin2.png" alt="Temas" width="400"/>
+  <img src="./screenshots/prin3.png" alt="Funcionalidades" width="400"/>
 </p>
 
 <p align="center">
