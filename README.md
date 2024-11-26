@@ -47,7 +47,7 @@ Um navegador web leve, rápido com foco em ser simples e bonito, construído com
 
 1. Clone o repositório:
    ```bash
-   git clone https://github.com/seu-usuario/clean-browser.git
+   git clone https://github.com/lucasvitancourt/clean-browser.git
    ```
 
 2. Instale as dependências:
