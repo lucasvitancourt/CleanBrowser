@@ -9,11 +9,19 @@ class BrowserApp {
     this.init();
   }
 
+  createWindow() {
+    const win = new BrowserWindow({
+      width: 800,
+      height: 600,
+    });
+
+  };
+
   init() {
     app.whenReady().then(() => {
       this.createWindow();
       this.setupIPC();
-      
+
       app.on('activate', () => {
         if (this.windows.size === 0) {
           this.createWindow();
@@ -29,8 +37,9 @@ class BrowserApp {
       }
     });
 
+    /* A função 'setupWindow' não existe, você precisa cria-lá e definir qual vai ser o comportamento dela, caso contrário você vai continuar recebendo TypeError */
     app.on('browser-window-created', (_, window) => {
-      this.setupWindow(window);
+      this.setupWindow(window); 
     });
   }
 
@@ -68,18 +77,18 @@ class BrowserApp {
           return { success: true, url: `https://${cleanInput}` };
         } else {
           const searchTerm = encodeURIComponent(cleanInput);
-          return { 
-            success: true, 
+          return {
+            success: true,
             url: `https://www.google.com/search?q=${searchTerm}`,
-            isSearch: true 
+            isSearch: true
           };
         }
       } catch (error) {
         console.error('Erro ao processar URL:', error);
-        return { 
-          success: false, 
+        return {
+          success: false,
           url: 'https://www.google.com',
-          error: error.message 
+          error: error.message
         };
       }
     });
