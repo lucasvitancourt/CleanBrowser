@@ -1,199 +1,794 @@
-const { ipcRenderer } = require('electron');
+// ===== CLASSES - DEFINIDAS PRIMEIRO =====
+
+// Sistema de Comandos Rápidos (Command Palette)
+class CommandPalette {
+    constructor() {
+        this.commands = [
+            { id: 'new-tab', name: 'Nova Aba', icon: 'plus', shortcut: 'Ctrl+T', action: () => window.tabSystem?.createTab() },
+            { id: 'close-tab', name: 'Fechar Aba', icon: 'x', shortcut: 'Ctrl+W', action: () => window.tabSystem?.closeTab(window.tabSystem.activeTabId) },
+            { id: 'reopen-tab', name: 'Reabrir Aba Fechada', icon: 'rotate-ccw', shortcut: 'Ctrl+Shift+T', action: () => this.reopenLastTab() },
+            { id: 'bookmarks', name: 'Favoritos', icon: 'star', shortcut: 'Ctrl+B', action: () => window.tabSystem?.createInternalTab('bookmarks') },
+            { id: 'history', name: 'Histórico', icon: 'clock', shortcut: 'Ctrl+H', action: () => window.tabSystem?.createInternalTab('history') },
+            { id: 'downloads', name: 'Downloads', icon: 'download', shortcut: 'Ctrl+J', action: () => window.tabSystem?.createInternalTab('downloads') },
+            { id: 'settings', name: 'Configurações', icon: 'settings', shortcut: 'Ctrl+,', action: () => window.tabSystem?.createInternalTab('settings') },
+            { id: 'focus-url', name: 'Focar Barra de URL', icon: 'search', shortcut: 'Ctrl+L', action: () => document.getElementById('urlBar')?.focus() },
+            { id: 'reload', name: 'Recarregar Página', icon: 'rotate-cw', shortcut: 'Ctrl+R', action: () => window.tabSystem?.getActiveWebview()?.reload() },
+            { id: 'hard-reload', name: 'Recarregar (Limpar Cache)', icon: 'refresh-ccw', shortcut: 'Ctrl+Shift+R', action: () => window.tabSystem?.getActiveWebview()?.reloadIgnoringCache() },
+            { id: 'zoom-in', name: 'Aumentar Zoom', icon: 'zoom-in', shortcut: 'Ctrl++', action: () => this.adjustZoom(0.1) },
+            { id: 'zoom-out', name: 'Diminuir Zoom', icon: 'zoom-out', shortcut: 'Ctrl+-', action: () => this.adjustZoom(-0.1) },
+            { id: 'zoom-reset', name: 'Resetar Zoom', icon: 'maximize-2', shortcut: 'Ctrl+0', action: () => this.resetZoom() },
+            { id: 'fullscreen', name: 'Tela Cheia', icon: 'maximize', shortcut: 'F11', action: () => this.toggleFullscreen() },
+            { id: 'devtools', name: 'Ferramentas do Desenvolvedor', icon: 'code', shortcut: 'F12', action: () => this.toggleDevTools() },
+            { id: 'find', name: 'Buscar na Página', icon: 'search', shortcut: 'Ctrl+F', action: () => this.showFindInPage() },
+            { id: 'print', name: 'Imprimir', icon: 'printer', shortcut: 'Ctrl+P', action: () => window.tabSystem?.getActiveWebview()?.print() },
+            { id: 'clear-history', name: 'Limpar Histórico', icon: 'trash-2', shortcut: '', action: () => window.historySystem?.clearHistory() },
+            { id: 'clear-cache', name: 'Limpar Cache', icon: 'trash', shortcut: '', action: () => this.clearCache() },
+        ];
+        this.closedTabs = [];
+        this.createPalette();
+        this.setupShortcuts();
+    }
+
+    createPalette() {
+        const palette = document.createElement('div');
+        palette.id = 'commandPalette';
+        palette.className = 'fixed inset-0 modal-backdrop hidden items-center justify-center z-[100]';
+        palette.innerHTML = `
+            <div class="bg-dark-surface rounded-2xl w-[600px] shadow-2xl border border-dark-border overflow-hidden" onclick="event.stopPropagation()">
+                <div class="p-4 border-b border-dark-border">
+                    <div class="flex items-center gap-3 bg-dark-elevated rounded-lg px-4 py-3">
+                        <i data-lucide="search" class="w-5 h-5 text-dark-secondary"></i>
+                        <input 
+                            type="text" 
+                            id="commandSearch" 
+                            placeholder="Digite um comando ou atalho..." 
+                            class="flex-1 bg-transparent outline-none text-sm text-dark-text placeholder-dark-secondary"
+                        >
+                    </div>
+                </div>
+                <div id="commandList" class="max-h-[400px] overflow-y-auto p-2"></div>
+            </div>
+        `;
+        document.body.appendChild(palette);
+
+        const searchInput = palette.querySelector('#commandSearch');
+        searchInput.addEventListener('input', (e) => this.filterCommands(e.target.value));
         
-// Verificar se é uma janela desvinculada
-document.addEventListener('DOMContentLoaded', () => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const detachedUrl = urlParams.get('url');
-    const isDetached = urlParams.get('isDetached');
-
-    if (isDetached && detachedUrl) {
-        // Se for uma janela desvinculada, criar uma aba com a URL fornecida
-        setTimeout(() => {
-            const tabSystem = window.tabSystem;
-            if (tabSystem) {
-                tabSystem.createTab(detachedUrl);
-            }
-        }, 100);
-    }
-});
-
-// Ouvir mensagem para carregar URL em janela desvinculada
-ipcRenderer.on('load-detached-url', (event, url) => {
-    const tabSystem = window.tabSystem;
-    if (tabSystem) {
-        tabSystem.createTab(url);
-    }
-});
-
-// Controles da janela
-document.addEventListener('DOMContentLoaded', () => {
-    // Inicializar controles da janela
-    const { ipcRenderer } = require('electron');
-    
-    const closeBtn = document.getElementById('closeBtn');
-    const minimizeBtn = document.getElementById('minimizeBtn');
-    const maximizeBtn = document.getElementById('maximizeBtn');
-
-    if (closeBtn) {
-        closeBtn.addEventListener('click', () => {
-            console.log('Fechando janela...');
-            ipcRenderer.send('window-control', 'close');
+        palette.addEventListener('click', (e) => {
+            if (e.target === palette) this.hide();
         });
+
+        this.renderCommands();
     }
 
-    if (minimizeBtn) {
-        minimizeBtn.addEventListener('click', () => {
-            console.log('Minimizando janela...');
-            ipcRenderer.send('window-control', 'minimize');
+    renderCommands(filter = '') {
+        const list = document.getElementById('commandList');
+        const filtered = this.commands.filter(cmd => 
+            cmd.name.toLowerCase().includes(filter.toLowerCase()) ||
+            cmd.shortcut.toLowerCase().includes(filter.toLowerCase())
+        );
+
+        list.innerHTML = filtered.map(cmd => `
+            <div class="command-item flex items-center justify-between p-3 rounded-lg hover:bg-dark-elevated cursor-pointer transition-colors group" data-command="${cmd.id}">
+                <div class="flex items-center gap-3">
+                    <i data-lucide="${cmd.icon}" class="w-4 h-4 text-dark-secondary"></i>
+                    <span class="text-sm text-dark-text">${cmd.name}</span>
+                </div>
+                ${cmd.shortcut ? `<kbd class="text-xs text-dark-secondary bg-dark-bg px-2 py-1 rounded border border-dark-border">${cmd.shortcut}</kbd>` : ''}
+            </div>
+        `).join('');
+
+        list.querySelectorAll('.command-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const cmd = this.commands.find(c => c.id === item.dataset.command);
+                if (cmd) {
+                    cmd.action();
+                    this.hide();
+                }
+            });
         });
-    }
 
-    if (maximizeBtn) {
-        maximizeBtn.addEventListener('click', () => {
-            console.log('Maximizando/restaurando janela...');
-            ipcRenderer.send('window-control', 'maximize');
-        });
-    }
-
-    // Inicializar sistemas em ordem correta
-    window.tabSystem = new TabSystem();
-    
-    // Aguardar o webview estar pronto antes de inicializar outros sistemas
-    const checkWebviewReady = setInterval(() => {
-        const webview = window.tabSystem.getActiveWebview();
-        if (webview && webview.getURL) {
-            clearInterval(checkWebviewReady);
-            window.bookmarkSystem = new BookmarkSystem();
-            window.historySystem = new HistorySystem();
+        if (typeof lucide !== 'undefined') {
+            lucide.createIcons();
         }
-    }, 100);
-});
-
-// Adicione este código ao seu script existente
-const settingsBtn = document.getElementById('settings');
-const settingsModal = document.getElementById('settingsModal');
-const settingsOverlay = document.getElementById('settingsOverlay');
-const closeSettings = document.getElementById('closeSettings');
-const saveSettings = document.getElementById('saveSettings');
-
-// Configurações padrão
-let browserSettings = {
-    theme: 'light',
-    homePage: 'https://google.com',
-    searchEngine: 'google'
-};
-
-// Carregar configurações salvas
-const loadSettings = () => {
-    const savedSettings = localStorage.getItem('browserSettings');
-    if (savedSettings) {
-        browserSettings = JSON.parse(savedSettings);
-        applySettings();
     }
-};
 
-// Aplicar configurações
-const applySettings = () => {
-    document.documentElement.setAttribute('data-theme', browserSettings.theme);
-    document.getElementById('homePageInput').value = browserSettings.homePage;
-    document.getElementById('searchEngineSelect').value = browserSettings.searchEngine;
-    
-    // Atualizar seleção de tema
-    document.querySelectorAll('.theme-option').forEach(option => {
-        option.classList.toggle('active', option.dataset.theme === browserSettings.theme);
-    });
-};
+    filterCommands(query) {
+        this.renderCommands(query);
+    }
 
-// Eventos
-settingsBtn.addEventListener('click', () => {
-    settingsModal.classList.add('active');
-    settingsOverlay.classList.add('active');
-});
+    show() {
+        const palette = document.getElementById('commandPalette');
+        palette.classList.remove('hidden');
+        palette.classList.add('flex');
+        document.getElementById('commandSearch').focus();
+        document.getElementById('commandSearch').value = '';
+        this.renderCommands();
+    }
 
-closeSettings.addEventListener('click', () => {
-    settingsModal.classList.remove('active');
-    settingsOverlay.classList.remove('active');
-});
+    hide() {
+        const palette = document.getElementById('commandPalette');
+        palette.classList.add('hidden');
+        palette.classList.remove('flex');
+    }
 
-document.querySelectorAll('.theme-option').forEach(option => {
-    option.addEventListener('click', () => {
-        document.querySelectorAll('.theme-option').forEach(opt => opt.classList.remove('active'));
-        option.classList.add('active');
-        browserSettings.theme = option.dataset.theme;
-        document.documentElement.setAttribute('data-theme', browserSettings.theme);
-    });
-});
+    setupShortcuts() {
+        document.addEventListener('keydown', (e) => {
+            // Command Palette
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'P') {
+                e.preventDefault();
+                this.show();
+                return;
+            }
 
-saveSettings.addEventListener('click', () => {
-    const oldEngine = browserSettings.searchEngine;
-    
-    browserSettings.homePage = document.getElementById('homePageInput').value;
-    browserSettings.searchEngine = document.getElementById('searchEngineSelect').value;
-    
-    localStorage.setItem('browserSettings', JSON.stringify(browserSettings));
-    
-    // Se o motor de busca mudou, atualizar a página inicial
-    if (oldEngine !== browserSettings.searchEngine) {
-        const webview = window.tabSystem.getActiveWebview();
-        if (webview) {
-            const currentUrl = webview.getURL();
-            // Se estiver em uma página de busca do motor antigo, recarregar com o novo
-            if (currentUrl.includes(oldEngine)) {
-                const searchTerm = extractSearchTerm(currentUrl, oldEngine);
-                if (searchTerm) {
-                    window.tabSystem.doSearch(webview, searchTerm);
+            // Executar comandos
+            this.commands.forEach(cmd => {
+                if (this.matchShortcut(e, cmd.shortcut)) {
+                    e.preventDefault();
+                    cmd.action();
+                }
+            });
+
+            // Navegação entre abas
+            if ((e.ctrlKey || e.metaKey) && e.key >= '1' && e.key <= '9') {
+                e.preventDefault();
+                const index = parseInt(e.key) - 1;
+                const tabs = Array.from(document.querySelectorAll('.tab'));
+                if (tabs[index]) {
+                    window.tabSystem?.activateTab(tabs[index].id);
                 }
             }
+
+            // Próxima/Anterior aba
+            if (e.ctrlKey && e.key === 'Tab') {
+                e.preventDefault();
+                this.switchTab(e.shiftKey ? -1 : 1);
+            }
+        });
+    }
+
+    matchShortcut(event, shortcut) {
+        if (!shortcut) return false;
+        const parts = shortcut.split('+').map(p => p.trim());
+        
+        let needsCtrl = parts.includes('Ctrl');
+        let needsShift = parts.includes('Shift');
+        let needsAlt = parts.includes('Alt');
+        let key = parts[parts.length - 1];
+
+        return (
+            (needsCtrl ? (event.ctrlKey || event.metaKey) : !event.ctrlKey && !event.metaKey) &&
+            (needsShift ? event.shiftKey : !event.shiftKey) &&
+            (needsAlt ? event.altKey : !event.altKey) &&
+            event.key.toLowerCase() === key.toLowerCase()
+        );
+    }
+
+    switchTab(direction) {
+        const tabs = Array.from(document.querySelectorAll('.tab'));
+        const currentIndex = tabs.findIndex(t => t.id === window.tabSystem?.activeTabId);
+        let newIndex = currentIndex + direction;
+        
+        if (newIndex < 0) newIndex = tabs.length - 1;
+        if (newIndex >= tabs.length) newIndex = 0;
+        
+        if (tabs[newIndex]) {
+            window.tabSystem?.activateTab(tabs[newIndex].id);
         }
     }
-    
-    settingsModal.classList.remove('active');
-    settingsOverlay.classList.remove('active');
-    
-    // Mostrar notificação
-    showNotification('Configurações salvas com sucesso');
-});
 
-// Adicione esta função auxiliar
-function extractSearchTerm(url, engine) {
-    try {
-        const urlObj = new URL(url);
-        switch (engine) {
-            case 'duckduckgo':
-                return urlObj.searchParams.get('q');
-            case 'bing':
-                return urlObj.searchParams.get('q');
-            case 'google':
-                return urlObj.searchParams.get('q');
-            default:
-                return null;
+    reopenLastTab() {
+        if (this.closedTabs.length > 0) {
+            const tab = this.closedTabs.pop();
+            window.tabSystem?.createTab(tab.url);
+            showNotification('Aba reaberta');
         }
-    } catch {
-        return null;
+    }
+
+    saveClosedTab(url) {
+        this.closedTabs.push({ url, timestamp: Date.now() });
+        if (this.closedTabs.length > 10) {
+            this.closedTabs.shift();
+        }
+    }
+
+    adjustZoom(delta) {
+        const webview = window.tabSystem?.getActiveWebview();
+        if (webview) {
+            const currentZoom = webview.getZoomFactor();
+            webview.setZoomFactor(Math.max(0.25, Math.min(5, currentZoom + delta)));
+        }
+    }
+
+    resetZoom() {
+        const webview = window.tabSystem?.getActiveWebview();
+        if (webview) {
+            webview.setZoomFactor(1);
+        }
+    }
+
+    toggleFullscreen() {
+        if (window.electronAPI) {
+            window.electronAPI.windowControl('fullscreen');
+        }
+    }
+
+    toggleDevTools() {
+        const webview = window.tabSystem?.getActiveWebview();
+        if (webview) {
+            if (webview.isDevToolsOpened()) {
+                webview.closeDevTools();
+            } else {
+                webview.openDevTools();
+            }
+        }
+    }
+
+    showFindInPage() {
+        const webview = window.tabSystem?.getActiveWebview();
+        if (webview) {
+            // Implementar busca na página
+            showNotification('Busca na página em desenvolvimento');
+        }
+    }
+
+    clearCache() {
+        if (confirm('Deseja limpar todo o cache do navegador?')) {
+            localStorage.clear();
+            showNotification('Cache limpo! Reinicie o navegador.');
+        }
     }
 }
 
-// Adicione esta função para notificações
-function showNotification(message) {
-    const notification = document.createElement('div');
-    notification.className = 'notification';
-    notification.innerHTML = `
-        <span class="material-symbols-rounded">info</span>
-        <span>${message}</span>
-    `;
+// Sistema de Favoritos
+class BookmarkSystem {
+    constructor() {
+        this.bookmarks = JSON.parse(localStorage.getItem('bookmarks') || '[]');
+        this.setupEventListeners();
+    }
 
-    document.body.appendChild(notification);
-    setTimeout(() => notification.classList.add('show'), 100);
-    setTimeout(() => {
-        notification.classList.remove('show');
-        setTimeout(() => notification.remove(), 300);
-    }, 3000);
+    setupEventListeners() {
+        const bookmarkBtn = document.getElementById('bookmark');
+        if (bookmarkBtn) {
+            bookmarkBtn.addEventListener('click', () => {
+                this.toggleBookmark();
+            });
+        }
+    }
+
+    toggleBookmark() {
+        const webview = window.tabSystem?.getActiveWebview();
+        if (!webview) return;
+
+        const url = webview.getURL();
+        const title = webview.getTitle() || url;
+
+        const index = this.bookmarks.findIndex(b => b.url === url);
+
+        if (index >= 0) {
+            this.bookmarks.splice(index, 1);
+            showNotification('Favorito removido');
+        } else {
+            this.bookmarks.push({ url, title, date: Date.now() });
+            showNotification('Adicionado aos favoritos');
+        }
+
+        localStorage.setItem('bookmarks', JSON.stringify(this.bookmarks));
+        this.updateBookmarkButton();
+    }
+
+    updateBookmarkButton() {
+        const webview = window.tabSystem?.getActiveWebview();
+        const bookmarkBtn = document.getElementById('bookmark');
+        if (!webview || !bookmarkBtn) return;
+
+        const url = webview.getURL();
+        const isBookmarked = this.bookmarks.some(b => b.url === url);
+        const icon = bookmarkBtn.querySelector('i');
+
+        if (icon) {
+            if (isBookmarked) {
+                icon.style.fill = '#fbbf24';
+                icon.style.stroke = '#fbbf24';
+            } else {
+                icon.style.fill = 'none';
+                icon.style.stroke = 'currentColor';
+            }
+        }
+    }
+
+    renderBookmarks() {
+        const modal = document.getElementById('bookmarksOverlay');
+        if (!modal) return;
+
+        let content = '<div class="p-5 space-y-2 max-h-[70vh] overflow-y-auto">';
+
+        if (this.bookmarks.length === 0) {
+            content += '<p class="text-dark-secondary text-center py-8">Nenhum favorito salvo</p>';
+        } else {
+            this.bookmarks.forEach((bookmark, index) => {
+                content += `
+                    <div class="flex items-center justify-between p-3 rounded-lg hover:bg-dark-elevated cursor-pointer group transition-colors" onclick="window.bookmarkSystem.openBookmark('${bookmark.url}')">
+                        <div class="flex items-center gap-3 flex-1 min-w-0">
+                            <i data-lucide="star" class="w-4 h-4 text-yellow-500 flex-shrink-0"></i>
+                            <div class="flex-1 min-w-0">
+                                <div class="text-sm font-medium text-dark-text truncate">${bookmark.title}</div>
+                                <div class="text-xs text-dark-secondary truncate">${bookmark.url}</div>
+                            </div>
+                        </div>
+                        <button onclick="event.stopPropagation(); window.bookmarkSystem.removeBookmark(${index})" class="icon-btn w-8 h-8 rounded-md opacity-0 group-hover:opacity-100 transition-opacity">
+                            <i data-lucide="trash-2" class="w-4 h-4 text-dark-secondary"></i>
+                        </button>
+                    </div>
+                `;
+            });
+        }
+
+        content += '</div>';
+
+        const existingContent = modal.querySelector('.bookmarks-content');
+        if (existingContent) {
+            existingContent.innerHTML = content;
+        } else {
+            const modalContent = document.createElement('div');
+            modalContent.className = 'bookmarks-content';
+            modalContent.innerHTML = content;
+            modal.querySelector('.bg-dark-surface').appendChild(modalContent);
+        }
+
+        if (typeof lucide !== 'undefined') {
+            lucide.createIcons();
+        }
+    }
+
+    renderBookmarksPage(container) {
+        if (this.bookmarks.length === 0) {
+            container.innerHTML = `
+                <div class="text-center py-16">
+                    <i data-lucide="star" class="w-16 h-16 mx-auto mb-4 text-dark-secondary"></i>
+                    <p class="text-dark-secondary text-lg">Nenhum favorito salvo</p>
+                    <p class="text-dark-secondary text-sm mt-2">Clique no ícone de estrela para adicionar páginas aos favoritos</p>
+                </div>
+            `;
+        } else {
+            const grouped = this.groupBookmarksByDate();
+            let html = '<div class="space-y-6">';
+            
+            Object.keys(grouped).forEach(dateKey => {
+                html += `
+                    <div>
+                        <h3 class="text-sm font-semibold text-dark-secondary mb-3 uppercase tracking-wide">${dateKey}</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                `;
+                
+                grouped[dateKey].forEach((bookmark, index) => {
+                    html += `
+                        <div class="bg-dark-surface border border-dark-border rounded-xl p-4 hover:border-dark-accent cursor-pointer transition-all group" onclick="window.bookmarkSystem.openBookmark('${bookmark.url}')">
+                            <div class="flex items-start justify-between mb-2">
+                                <i data-lucide="star" class="w-5 h-5 text-yellow-500 flex-shrink-0"></i>
+                                <button onclick="event.stopPropagation(); window.bookmarkSystem.removeBookmark(${bookmark.originalIndex})" class="icon-btn w-7 h-7 rounded-md opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <i data-lucide="trash-2" class="w-3.5 h-3.5 text-dark-secondary"></i>
+                                </button>
+                            </div>
+                            <h4 class="text-sm font-medium text-dark-text mb-1 truncate">${bookmark.title}</h4>
+                            <p class="text-xs text-dark-secondary truncate">${bookmark.url}</p>
+                        </div>
+                    `;
+                });
+                
+                html += '</div></div>';
+            });
+            
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        if (typeof lucide !== 'undefined') {
+            lucide.createIcons();
+        }
+    }
+
+    groupBookmarksByDate() {
+        const grouped = {};
+        const now = Date.now();
+        
+        this.bookmarks.forEach((bookmark, index) => {
+            const age = now - bookmark.date;
+            const days = Math.floor(age / (1000 * 60 * 60 * 24));
+            
+            let key;
+            if (days === 0) key = 'Hoje';
+            else if (days === 1) key = 'Ontem';
+            else if (days < 7) key = 'Esta Semana';
+            else if (days < 30) key = 'Este Mês';
+            else key = 'Mais Antigos';
+            
+            if (!grouped[key]) grouped[key] = [];
+            grouped[key].push({ ...bookmark, originalIndex: index });
+        });
+        
+        return grouped;
+    }
+
+    openBookmark(url) {
+        window.tabSystem?.navigateTo(url);
+        closeModal('bookmarks');
+    }
+
+    removeBookmark(index) {
+        this.bookmarks.splice(index, 1);
+        localStorage.setItem('bookmarks', JSON.stringify(this.bookmarks));
+        this.renderBookmarks();
+        showNotification('Favorito removido');
+    }
 }
 
-// Carregar configurações ao iniciar
-loadSettings();
+// Sistema de Histórico
+class HistorySystem {
+    constructor() {
+        this.history = JSON.parse(localStorage.getItem('history') || '[]');
+        this.setupEventListeners();
+    }
 
-// Sistema de abas
+    setupEventListeners() {
+        const historyBtn = document.getElementById('history');
+        if (historyBtn) {
+            historyBtn.addEventListener('click', () => {
+                this.renderHistory();
+                openModal('history');
+            });
+        }
+    }
+
+    addToHistory(url, title) {
+        // Evitar duplicatas consecutivas
+        if (this.history.length > 0 && this.history[0].url === url) {
+            return;
+        }
+
+        this.history.unshift({
+            url,
+            title: title || url,
+            date: Date.now()
+        });
+
+        // Limitar a 1000 entradas
+        if (this.history.length > 1000) {
+            this.history = this.history.slice(0, 1000);
+        }
+
+        localStorage.setItem('history', JSON.stringify(this.history));
+    }
+
+    renderHistory() {
+        const modal = document.getElementById('historyOverlay');
+        if (!modal) return;
+
+        let content = '<div class="p-5 space-y-2 max-h-[60vh] overflow-y-auto">';
+
+        if (this.history.length === 0) {
+            content += '<p class="text-dark-secondary text-center py-8">Nenhum histórico</p>';
+        } else {
+            this.history.slice(0, 100).forEach((item) => {
+                const date = new Date(item.date);
+                const timeStr = date.toLocaleString('pt-BR', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+
+                content += `
+                    <div class="flex items-center justify-between p-3 rounded-lg hover:bg-dark-elevated cursor-pointer transition-colors" onclick="window.historySystem.openHistory('${item.url}')">
+                        <div class="flex items-center gap-3 flex-1 min-w-0">
+                            <i data-lucide="clock" class="w-4 h-4 text-dark-secondary flex-shrink-0"></i>
+                            <div class="flex-1 min-w-0">
+                                <div class="text-sm font-medium text-dark-text truncate">${item.title}</div>
+                                <div class="text-xs text-dark-secondary truncate">${item.url}</div>
+                            </div>
+                        </div>
+                        <div class="text-xs text-dark-secondary">${timeStr}</div>
+                    </div>
+                `;
+            });
+        }
+
+        content += '</div>';
+
+        const existingContent = modal.querySelector('.history-content');
+        if (existingContent) {
+            existingContent.innerHTML = content;
+        } else {
+            const modalContent = document.createElement('div');
+            modalContent.className = 'history-content';
+            modalContent.innerHTML = content;
+            modal.querySelector('.bg-dark-surface').appendChild(modalContent);
+        }
+
+        if (typeof lucide !== 'undefined') {
+            lucide.createIcons();
+        }
+    }
+
+    renderHistoryPage(container) {
+        if (this.history.length === 0) {
+            container.innerHTML = `
+                <div class="text-center py-16">
+                    <i data-lucide="clock" class="w-16 h-16 mx-auto mb-4 text-dark-secondary"></i>
+                    <p class="text-dark-secondary text-lg">Nenhum histórico</p>
+                    <p class="text-dark-secondary text-sm mt-2">As páginas que você visitar aparecerão aqui</p>
+                </div>
+            `;
+        } else {
+            const grouped = this.groupHistoryByDate();
+            let html = `
+                <div class="mb-6 flex items-center justify-between">
+                    <input type="text" id="historySearch" placeholder="Buscar no histórico..." 
+                        class="flex-1 px-4 py-2 bg-dark-elevated border border-dark-border rounded-lg text-sm text-dark-text placeholder-dark-secondary focus:border-dark-accent transition-all">
+                    <button onclick="window.historySystem.clearHistory()" class="ml-3 px-4 py-2 bg-dark-elevated border border-dark-border rounded-lg text-sm text-dark-text hover:bg-dark-accent hover:text-white transition-all flex items-center gap-2">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        Limpar Histórico
+                    </button>
+                </div>
+                <div id="historyResults" class="space-y-6">
+            `;
+            
+            Object.keys(grouped).forEach(dateKey => {
+                html += `
+                    <div>
+                        <h3 class="text-sm font-semibold text-dark-secondary mb-3 uppercase tracking-wide">${dateKey}</h3>
+                        <div class="space-y-1">
+                `;
+                
+                grouped[dateKey].forEach(item => {
+                    const time = new Date(item.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                    html += `
+                        <div class="flex items-center gap-3 p-3 rounded-lg hover:bg-dark-surface cursor-pointer transition-colors border border-transparent hover:border-dark-border" onclick="window.historySystem.openHistory('${item.url}')">
+                            <i data-lucide="globe" class="w-4 h-4 text-dark-secondary flex-shrink-0"></i>
+                            <div class="flex-1 min-w-0">
+                                <div class="text-sm font-medium text-dark-text truncate">${item.title}</div>
+                                <div class="text-xs text-dark-secondary truncate">${item.url}</div>
+                            </div>
+                            <div class="text-xs text-dark-secondary">${time}</div>
+                        </div>
+                    `;
+                });
+                
+                html += '</div></div>';
+            });
+            
+            html += '</div>';
+            container.innerHTML = html;
+
+            // Busca em tempo real
+            const searchInput = document.getElementById('historySearch');
+            if (searchInput) {
+                searchInput.addEventListener('input', (e) => {
+                    this.searchHistory(e.target.value);
+                });
+            }
+        }
+
+        if (typeof lucide !== 'undefined') {
+            lucide.createIcons();
+        }
+    }
+
+    groupHistoryByDate() {
+        const grouped = {};
+        const now = Date.now();
+        
+        this.history.forEach(item => {
+            const age = now - item.date;
+            const days = Math.floor(age / (1000 * 60 * 60 * 24));
+            
+            let key;
+            if (days === 0) key = 'Hoje';
+            else if (days === 1) key = 'Ontem';
+            else if (days < 7) key = 'Esta Semana';
+            else if (days < 30) key = 'Este Mês';
+            else key = 'Mais Antigos';
+            
+            if (!grouped[key]) grouped[key] = [];
+            grouped[key].push(item);
+        });
+        
+        return grouped;
+    }
+
+    searchHistory(query) {
+        const results = document.getElementById('historyResults');
+        if (!results) return;
+
+        const filtered = this.history.filter(item => 
+            item.title.toLowerCase().includes(query.toLowerCase()) ||
+            item.url.toLowerCase().includes(query.toLowerCase())
+        );
+
+        if (filtered.length === 0) {
+            results.innerHTML = '<p class="text-dark-secondary text-center py-8">Nenhum resultado encontrado</p>';
+            return;
+        }
+
+        let html = '<div class="space-y-1">';
+        filtered.slice(0, 50).forEach(item => {
+            const time = new Date(item.date).toLocaleString('pt-BR', { 
+                day: '2-digit', 
+                month: '2-digit', 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+            html += `
+                <div class="flex items-center gap-3 p-3 rounded-lg hover:bg-dark-surface cursor-pointer transition-colors border border-transparent hover:border-dark-border" onclick="window.historySystem.openHistory('${item.url}')">
+                    <i data-lucide="globe" class="w-4 h-4 text-dark-secondary flex-shrink-0"></i>
+                    <div class="flex-1 min-w-0">
+                        <div class="text-sm font-medium text-dark-text truncate">${item.title}</div>
+                        <div class="text-xs text-dark-secondary truncate">${item.url}</div>
+                    </div>
+                    <div class="text-xs text-dark-secondary">${time}</div>
+                </div>
+            `;
+        });
+        html += '</div>';
+        results.innerHTML = html;
+
+        if (typeof lucide !== 'undefined') {
+            lucide.createIcons();
+        }
+    }
+
+    openHistory(url) {
+        window.tabSystem?.navigateTo(url);
+        closeModal('history');
+    }
+
+    clearHistory() {
+        if (confirm('Deseja limpar todo o histórico?')) {
+            this.history = [];
+            localStorage.setItem('history', JSON.stringify(this.history));
+            this.renderHistory();
+            showNotification('Histórico limpo');
+        }
+    }
+}
+
+// Sistema de Sugestões
+class SuggestionSystem {
+    constructor() {
+        this.container = null;
+        this.suggestions = [];
+        this.selectedIndex = -1;
+        this.createContainer();
+    }
+
+    createContainer() {
+        this.container = document.createElement('div');
+        this.container.id = 'suggestions';
+        this.container.className = 'absolute top-full left-0 right-0 mt-2 bg-dark-surface border border-dark-border rounded-xl shadow-2xl overflow-hidden hidden z-50 animate-slide-in';
+        document.querySelector('.flex-1.flex.items-center').appendChild(this.container);
+    }
+
+    show(query) {
+        if (!query || query.length < 2) {
+            this.hide();
+            return;
+        }
+
+        this.suggestions = this.getSuggestions(query);
+        
+        if (this.suggestions.length === 0) {
+            this.hide();
+            return;
+        }
+
+        this.render();
+        this.container.classList.remove('hidden');
+    }
+
+    getSuggestions(query) {
+        const suggestions = [];
+        const lowerQuery = query.toLowerCase();
+
+        // Buscar em favoritos
+        if (window.bookmarkSystem) {
+            window.bookmarkSystem.bookmarks.forEach(bookmark => {
+                if (bookmark.title.toLowerCase().includes(lowerQuery) || 
+                    bookmark.url.toLowerCase().includes(lowerQuery)) {
+                    suggestions.push({
+                        type: 'bookmark',
+                        icon: 'star',
+                        title: bookmark.title,
+                        url: bookmark.url,
+                        color: 'text-yellow-500'
+                    });
+                }
+            });
+        }
+
+        // Buscar em histórico
+        if (window.historySystem) {
+            window.historySystem.history.slice(0, 50).forEach(item => {
+                if ((item.title.toLowerCase().includes(lowerQuery) || 
+                     item.url.toLowerCase().includes(lowerQuery)) &&
+                    !suggestions.find(s => s.url === item.url)) {
+                    suggestions.push({
+                        type: 'history',
+                        icon: 'clock',
+                        title: item.title,
+                        url: item.url,
+                        color: 'text-dark-secondary'
+                    });
+                }
+            });
+        }
+
+        // Sugestões de busca
+        if (!query.includes('.') && !query.startsWith('http')) {
+            suggestions.unshift({
+                type: 'search',
+                icon: 'search',
+                title: `Buscar "${query}"`,
+                url: `https://www.google.com/search?q=${encodeURIComponent(query)}`,
+                color: 'text-blue-500'
+            });
+        }
+
+        return suggestions.slice(0, 8);
+    }
+
+    render() {
+        this.container.innerHTML = this.suggestions.map((suggestion, index) => `
+            <div class="suggestion-item flex items-center gap-3 p-3 hover:bg-dark-elevated cursor-pointer transition-colors ${index === this.selectedIndex ? 'bg-dark-elevated' : ''}" data-index="${index}">
+                <i data-lucide="${suggestion.icon}" class="w-4 h-4 ${suggestion.color} flex-shrink-0"></i>
+                <div class="flex-1 min-w-0">
+                    <div class="text-sm font-medium text-dark-text truncate">${suggestion.title}</div>
+                    <div class="text-xs text-dark-secondary truncate">${suggestion.url}</div>
+                </div>
+                <i data-lucide="corner-down-left" class="w-3 h-3 text-dark-secondary flex-shrink-0"></i>
+            </div>
+        `).join('');
+
+        this.container.querySelectorAll('.suggestion-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const index = parseInt(item.dataset.index);
+                this.select(index);
+            });
+        });
+
+        if (typeof lucide !== 'undefined') {
+            lucide.createIcons();
+        }
+    }
+
+    select(index) {
+        if (index >= 0 && index < this.suggestions.length) {
+            const suggestion = this.suggestions[index];
+            window.tabSystem?.navigateTo(suggestion.url);
+            this.hide();
+        }
+    }
+
+    navigate(direction) {
+        if (this.suggestions.length === 0) return;
+
+        this.selectedIndex += direction;
+        
+        if (this.selectedIndex < -1) {
+            this.selectedIndex = this.suggestions.length - 1;
+        } else if (this.selectedIndex >= this.suggestions.length) {
+            this.selectedIndex = -1;
+        }
+
+        this.render();
+    }
+
+    hide() {
+        this.container.classList.add('hidden');
+        this.selectedIndex = -1;
+    }
+}
+
+// Sistema de Abas
 class TabSystem {
     constructor() {
         this.tabs = [];
@@ -203,119 +798,86 @@ class TabSystem {
         this.tabsContent = document.getElementById('tabsContent');
         this.newTabBtn = document.getElementById('newTabBtn');
         this.urlBar = document.getElementById('urlBar');
-        
+
         this.init();
-        this.setupUrlBar();
     }
 
     init() {
         if (this.newTabBtn) {
             this.newTabBtn.addEventListener('click', () => this.createTab());
         }
-        // Criar primeira aba com um delay maior
-        setTimeout(() => this.createTab(), 500);
-    }
 
-    setupUrlBar() {
-        this.urlBar.addEventListener('keypress', async (e) => {
-            if (e.key === 'Enter') {
-                const webview = this.getActiveWebview();
-                if (webview) {
-                    const input = this.urlBar.value.trim();
-                    
-                    // Se parece com uma URL
-                    if (this.isValidUrl(input) || this.isDomain(input)) {
-                        let url = input;
-                        if (!url.startsWith('http://') && !url.startsWith('https://')) {
-                            url = 'https://' + url;
-                        }
-                        webview.loadURL(url).catch(() => {
-                            // Se falhar ao carregar como URL, faz uma pesquisa
-                            this.doSearch(webview, input);
-                        });
+        if (this.urlBar) {
+            this.urlBar.addEventListener('input', (e) => {
+                window.suggestionSystem?.show(e.target.value);
+            });
+
+            this.urlBar.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    window.suggestionSystem?.navigate(1);
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    window.suggestionSystem?.navigate(-1);
+                } else if (e.key === 'Escape') {
+                    window.suggestionSystem?.hide();
+                    this.urlBar.blur();
+                }
+            });
+
+            this.urlBar.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    if (window.suggestionSystem?.selectedIndex >= 0) {
+                        window.suggestionSystem.select(window.suggestionSystem.selectedIndex);
                     } else {
-                        // Se não parece URL, faz uma pesquisa
-                        this.doSearch(webview, input);
+                        this.navigateTo(this.urlBar.value);
+                        window.suggestionSystem?.hide();
                     }
                 }
-            }
-        });
-    }
+            });
 
-    isValidUrl(string) {
-        try {
-            new URL(string);
-            return true;
-        } catch {
-            return false;
+            this.urlBar.addEventListener('blur', () => {
+                setTimeout(() => window.suggestionSystem?.hide(), 200);
+            });
         }
-    }
 
-    isDomain(string) {
-        return /^[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}$/.test(string);
-    }
-
-    doSearch(webview, searchTerm) {
-        const encodedSearch = encodeURIComponent(searchTerm);
-        const settings = JSON.parse(localStorage.getItem('browserSettings')) || {};
-        const searchEngine = settings.searchEngine || 'google';
-        
-        let searchUrl;
-        switch (searchEngine) {
-            case 'duckduckgo':
-                searchUrl = `https://duckduckgo.com/?q=${encodedSearch}`;
-                break;
-            case 'bing':
-                searchUrl = `https://www.bing.com/search?q=${encodedSearch}`;
-                break;
-            case 'google':
-            default:
-                searchUrl = `https://www.google.com/search?q=${encodedSearch}`;
-                break;
-        }
-        
-        webview.loadURL(searchUrl);
+        // Criar primeira aba
+        setTimeout(() => this.createTab(), 100);
     }
 
     createTab(url = 'https://www.google.com') {
         const tabId = `tab-${this.tabCounter++}`;
         const contentId = `content-${tabId}`;
 
-        // Criar elemento da aba
+        // Criar aba
         const tab = document.createElement('div');
-        tab.className = 'tab';
+        tab.className = 'tab h-9 min-w-[160px] max-w-[240px] flex items-center gap-2 px-3 cursor-pointer bg-dark-bg';
         tab.id = tabId;
         tab.innerHTML = `
-            <span class="tab-favicon">
-                <span class="material-symbols-rounded">public</span>
-            </span>
-            <span class="tab-title">Nova aba</span>
-            <button class="tab-close">
-                <span class="material-symbols-rounded">close</span>
+            <div class="w-4 h-4 flex-shrink-0">
+                <i data-lucide="globe" class="w-4 h-4 text-dark-secondary"></i>
+            </div>
+            <span class="flex-1 text-xs truncate text-dark-text">Nova aba</span>
+            <button class="tab-close w-5 h-5 flex-shrink-0 rounded-full hover:bg-dark-elevated transition-colors flex items-center justify-center">
+                <i data-lucide="x" class="w-3 h-3 text-dark-secondary"></i>
             </button>
         `;
 
-        // Criar conteúdo da aba
+        // Criar conteúdo
         const content = document.createElement('div');
-        content.className = 'tab-content';
+        content.className = 'absolute inset-0 hidden';
         content.id = contentId;
         content.innerHTML = `<webview src="${url}" allowpopups></webview>`;
 
-        // Adicionar ao DOM primeiro
         this.tabsContainer.appendChild(tab);
         this.tabsContent.appendChild(content);
 
-        // Configurar eventos após adicionar ao DOM
-        const webview = content.querySelector('webview');
-        
-        webview.addEventListener('dom-ready', () => {
-            this.setupWebview(webview, tab);
-            if (this.activeTabId === tabId) {
-                this.urlBar.value = webview.getURL();
-            }
-        });
+        // Inicializar ícones
+        if (typeof lucide !== 'undefined') {
+            lucide.createIcons();
+        }
 
-        // Eventos da aba
+        // Eventos
         tab.addEventListener('click', (e) => {
             if (!e.target.closest('.tab-close')) {
                 this.activateTab(tabId);
@@ -327,146 +889,402 @@ class TabSystem {
             this.closeTab(tabId);
         });
 
-        // Ativar a nova aba
+        // Drag & Drop
+        this.setupTabDragDrop(tab);
+
+        const webview = content.querySelector('webview');
+        
+        // Aguardar webview estar pronto antes de ativar
+        webview.addEventListener('dom-ready', () => {
+            this.setupWebview(webview, tab);
+            
+            // Atualizar URL bar se for a aba ativa
+            if (this.activeTabId === tabId) {
+                try {
+                    this.urlBar.value = webview.getURL();
+                } catch (e) {
+                    console.log('URL ainda não disponível');
+                }
+            }
+        });
+
         this.activateTab(tabId);
-
-        // Adicionar suporte ao arrasto
-        this.setupTabDrag(tab);
-
         return { tabId, webview };
     }
 
-    setupWebview(webview, tab) {
-        // Configurar controles de navegação
-        const backBtn = document.getElementById('back');
-        const forwardBtn = document.getElementById('forward');
-        const reloadBtn = document.getElementById('reload');
+    createInternalTab(type) {
+        const tabId = `tab-${this.tabCounter++}`;
+        const contentId = `content-${tabId}`;
+
+        // Títulos e ícones
+        const pages = {
+            bookmarks: { title: 'Favoritos', icon: 'star' },
+            history: { title: 'Histórico', icon: 'clock' },
+            downloads: { title: 'Downloads', icon: 'download' },
+            settings: { title: 'Configurações', icon: 'settings' }
+        };
+
+        const page = pages[type];
+
+        // Criar aba
+        const tab = document.createElement('div');
+        tab.className = 'tab h-9 min-w-[160px] max-w-[240px] flex items-center gap-2 px-3 cursor-pointer bg-dark-bg';
+        tab.id = tabId;
+        tab.dataset.internal = type;
+        tab.innerHTML = `
+            <div class="w-4 h-4 flex-shrink-0">
+                <i data-lucide="${page.icon}" class="w-4 h-4 text-dark-secondary"></i>
+            </div>
+            <span class="flex-1 text-xs truncate text-dark-text">${page.title}</span>
+            <button class="tab-close w-5 h-5 flex-shrink-0 rounded-full hover:bg-dark-elevated transition-colors flex items-center justify-center">
+                <i data-lucide="x" class="w-3 h-3 text-dark-secondary"></i>
+            </button>
+        `;
+
+        // Criar conteúdo interno
+        const content = document.createElement('div');
+        content.className = 'absolute inset-0 hidden bg-dark-bg overflow-y-auto';
+        content.id = contentId;
+        content.innerHTML = this.getInternalPageHTML(type);
+
+        this.tabsContainer.appendChild(tab);
+        this.tabsContent.appendChild(content);
+
+        // Inicializar ícones
+        if (typeof lucide !== 'undefined') {
+            lucide.createIcons();
+        }
+
+        // Eventos
+        tab.addEventListener('click', (e) => {
+            if (!e.target.closest('.tab-close')) {
+                this.activateTab(tabId);
+            }
+        });
+
+        tab.querySelector('.tab-close').addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.closeTab(tabId);
+        });
+
+        // Drag & Drop
+        this.setupTabDragDrop(tab);
+
+        this.activateTab(tabId);
         
-        // Atualizar estado dos botões
-        const updateNavigationButtons = () => {
-            backBtn.disabled = !webview.canGoBack();
-            forwardBtn.disabled = !webview.canGoForward();
-            backBtn.style.opacity = webview.canGoBack() ? '1' : '0.5';
-            forwardBtn.style.opacity = webview.canGoForward() ? '1' : '0.5';
-        };
+        // Renderizar conteúdo
+        this.renderInternalPage(type, content);
+        
+        return tabId;
+    }
 
-        // Configurar eventos de navegação
-        backBtn.onclick = () => {
-            if (webview.canGoBack()) {
-                webview.goBack();
+    getInternalPageHTML(type) {
+        const baseHTML = `
+            <div class="max-w-4xl mx-auto p-8">
+                <div class="mb-8">
+                    <h1 class="text-3xl font-bold text-dark-text mb-2"></h1>
+                    <p class="text-dark-secondary"></p>
+                </div>
+                <div class="internal-content"></div>
+            </div>
+        `;
+        return baseHTML;
+    }
+
+    renderInternalPage(type, content) {
+        const title = content.querySelector('h1');
+        const subtitle = content.querySelector('p');
+        const internalContent = content.querySelector('.internal-content');
+
+        switch (type) {
+            case 'bookmarks':
+                title.textContent = 'Favoritos';
+                subtitle.textContent = 'Seus sites favoritos salvos';
+                window.bookmarkSystem?.renderBookmarksPage(internalContent);
+                break;
+            case 'history':
+                title.textContent = 'Histórico';
+                subtitle.textContent = 'Páginas visitadas recentemente';
+                window.historySystem?.renderHistoryPage(internalContent);
+                break;
+            case 'downloads':
+                title.textContent = 'Downloads';
+                subtitle.textContent = 'Arquivos baixados';
+                internalContent.innerHTML = '<p class="text-dark-secondary text-center py-8">Nenhum download</p>';
+                break;
+            case 'settings':
+                title.textContent = 'Configurações';
+                subtitle.textContent = 'Personalize seu navegador';
+                this.renderSettingsPage(internalContent);
+                break;
+        }
+
+        if (typeof lucide !== 'undefined') {
+            lucide.createIcons();
+        }
+    }
+
+    renderSettingsPage(container) {
+        const settings = JSON.parse(localStorage.getItem('browserSettings') || '{"homePage":"https://google.com","searchEngine":"google"}');
+        const theme = localStorage.getItem('theme') || 'dark';
+
+        container.innerHTML = `
+            <div class="space-y-6">
+                <div class="bg-dark-surface p-6 rounded-xl border border-dark-border">
+                    <h3 class="text-lg font-semibold text-dark-text mb-4">Aparência</h3>
+                    <div class="flex gap-3">
+                        <button onclick="setTheme('dark'); window.tabSystem.refreshInternalTab()" class="flex-1 px-4 py-3 rounded-lg border-2 ${theme === 'dark' ? 'border-dark-accent' : 'border-dark-border'} hover:border-dark-accent transition-all">
+                            <i data-lucide="moon" class="w-5 h-5 mx-auto mb-2"></i>
+                            <span class="text-sm block">Escuro</span>
+                        </button>
+                        <button onclick="setTheme('light'); window.tabSystem.refreshInternalTab()" class="flex-1 px-4 py-3 rounded-lg border-2 ${theme === 'light' ? 'border-dark-accent' : 'border-dark-border'} hover:border-dark-accent transition-all">
+                            <i data-lucide="sun" class="w-5 h-5 mx-auto mb-2"></i>
+                            <span class="text-sm block">Claro</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="bg-dark-surface p-6 rounded-xl border border-dark-border">
+                    <h3 class="text-lg font-semibold text-dark-text mb-4">Navegação</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-dark-text mb-2">Página Inicial</label>
+                            <input type="text" id="homePageInput" value="${settings.homePage}" 
+                                class="w-full px-3 py-2 bg-dark-elevated border border-dark-border rounded-lg text-sm text-dark-text placeholder-dark-secondary focus:border-dark-accent transition-all">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-dark-text mb-2">Motor de Busca</label>
+                            <select id="searchEngineSelect" 
+                                class="w-full px-3 py-2 bg-dark-elevated border border-dark-border rounded-lg text-sm text-dark-text focus:border-dark-accent transition-all">
+                                <option value="google" ${settings.searchEngine === 'google' ? 'selected' : ''}>Google</option>
+                                <option value="duckduckgo" ${settings.searchEngine === 'duckduckgo' ? 'selected' : ''}>DuckDuckGo</option>
+                                <option value="bing" ${settings.searchEngine === 'bing' ? 'selected' : ''}>Bing</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <button onclick="window.tabSystem.saveSettingsFromPage()" class="w-full py-3 bg-dark-accent text-white rounded-lg font-medium hover:bg-dark-accent-hover transition-all">
+                    Salvar Configurações
+                </button>
+            </div>
+        `;
+
+        if (typeof lucide !== 'undefined') {
+            lucide.createIcons();
+        }
+    }
+
+    saveSettingsFromPage() {
+        const homePageInput = document.getElementById('homePageInput');
+        const searchEngineSelect = document.getElementById('searchEngineSelect');
+        
+        const settings = {
+            homePage: homePageInput?.value || 'https://google.com',
+            searchEngine: searchEngineSelect?.value || 'google'
+        };
+        
+        localStorage.setItem('browserSettings', JSON.stringify(settings));
+        showNotification('Configurações salvas!');
+    }
+
+    refreshInternalTab() {
+        const activeContent = document.getElementById(`content-${this.activeTabId}`);
+        if (activeContent) {
+            const tab = document.getElementById(this.activeTabId);
+            if (tab && tab.dataset.internal) {
+                this.renderInternalPage(tab.dataset.internal, activeContent);
             }
-        };
+        }
+    }
 
-        forwardBtn.onclick = () => {
-            if (webview.canGoForward()) {
-                webview.goForward();
+    setupTabDragDrop(tab) {
+        let draggedTab = null;
+
+        tab.setAttribute('draggable', 'true');
+
+        tab.addEventListener('dragstart', (e) => {
+            draggedTab = tab;
+            tab.style.opacity = '0.5';
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/html', tab.innerHTML);
+        });
+
+        tab.addEventListener('dragend', (e) => {
+            tab.style.opacity = '1';
+            
+            // Remover indicadores
+            document.querySelectorAll('.tab').forEach(t => {
+                t.classList.remove('drag-over-left', 'drag-over-right');
+            });
+        });
+
+        tab.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+
+            if (draggedTab && draggedTab !== tab) {
+                const rect = tab.getBoundingClientRect();
+                const midpoint = rect.left + rect.width / 2;
+                
+                // Remover classes anteriores
+                tab.classList.remove('drag-over-left', 'drag-over-right');
+                
+                // Adicionar classe baseada na posição
+                if (e.clientX < midpoint) {
+                    tab.classList.add('drag-over-left');
+                } else {
+                    tab.classList.add('drag-over-right');
+                }
             }
-        };
+        });
 
-        reloadBtn.onclick = () => {
-            if (reloadBtn.querySelector('.material-symbols-rounded').textContent === 'close') {
-                webview.stop();
-            } else {
-                webview.reload();
+        tab.addEventListener('dragleave', (e) => {
+            tab.classList.remove('drag-over-left', 'drag-over-right');
+        });
+
+        tab.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            if (draggedTab && draggedTab !== tab) {
+                const rect = tab.getBoundingClientRect();
+                const midpoint = rect.left + rect.width / 2;
+                
+                // Inserir antes ou depois
+                if (e.clientX < midpoint) {
+                    this.tabsContainer.insertBefore(draggedTab, tab);
+                } else {
+                    this.tabsContainer.insertBefore(draggedTab, tab.nextSibling);
+                }
             }
-        };
 
-        // Eventos do webview
+            tab.classList.remove('drag-over-left', 'drag-over-right');
+        });
+    }
+
+    setupWebview(webview, tab) {
+        const loadingBar = document.getElementById('loadingBar');
+
         webview.addEventListener('did-start-loading', () => {
-            if (tab) {
-                tab.classList.add('loading');
-                reloadBtn.querySelector('.material-symbols-rounded').textContent = 'close';
+            if (this.activeTabId === tab.id && loadingBar) {
+                loadingBar.classList.add('active');
+                loadingBar.style.width = '30%';
+            }
+            // Adicionar indicador de carregamento na aba
+            const icon = tab.querySelector('.w-4.h-4.flex-shrink-0 i');
+            if (icon) {
+                icon.classList.add('animate-spin');
             }
         });
 
         webview.addEventListener('did-stop-loading', () => {
-            if (tab) {
-                tab.classList.remove('loading');
-                reloadBtn.querySelector('.material-symbols-rounded').textContent = 'refresh';
-                if (this.activeTabId === tab.id) {
-                    this.urlBar.value = webview.getURL();
-                }
+            if (this.activeTabId === tab.id && loadingBar) {
+                loadingBar.style.width = '100%';
+                setTimeout(() => {
+                    loadingBar.classList.remove('active');
+                    loadingBar.style.width = '0%';
+                }, 300);
             }
-            updateNavigationButtons();
+            // Remover indicador de carregamento
+            const icon = tab.querySelector('.w-4.h-4.flex-shrink-0 i');
+            if (icon) {
+                icon.classList.remove('animate-spin');
+            }
         });
 
-        webview.addEventListener('did-navigate', updateNavigationButtons);
-        webview.addEventListener('did-navigate-in-page', updateNavigationButtons);
-
-        // Outros eventos existentes
         webview.addEventListener('page-title-updated', (e) => {
-            if (tab) {
-                const titleElement = tab.querySelector('.tab-title');
-                if (titleElement) {
-                    titleElement.textContent = e.title;
+            const titleEl = tab.querySelector('.truncate');
+            if (titleEl) {
+                titleEl.textContent = e.title;
+                titleEl.classList.add('animate-fade-in');
+            }
+
+            // Adicionar ao histórico
+            if (window.historySystem) {
+                window.historySystem.addToHistory(webview.getURL(), e.title);
+            }
+        });
+
+        webview.addEventListener('did-navigate', () => {
+            if (this.activeTabId === tab.id) {
+                this.urlBar.value = webview.getURL();
+
+                // Atualizar botão de favorito
+                if (window.bookmarkSystem) {
+                    window.bookmarkSystem.updateBookmarkButton();
                 }
+            }
+
+            // Atualizar botões de navegação
+            this.updateNavigationButtons();
+        });
+
+        webview.addEventListener('did-navigate-in-page', () => {
+            if (this.activeTabId === tab.id) {
+                this.urlBar.value = webview.getURL();
             }
         });
 
         webview.addEventListener('page-favicon-updated', (e) => {
-            if (tab) {
-                const favicon = tab.querySelector('.tab-favicon');
-                if (favicon && e.favicons && e.favicons[0]) {
-                    favicon.innerHTML = `<img src="${e.favicons[0]}" alt="favicon">`;
+            if (e.favicons && e.favicons[0]) {
+                const iconContainer = tab.querySelector('.w-4.h-4.flex-shrink-0');
+                if (iconContainer) {
+                    iconContainer.innerHTML = `<img src="${e.favicons[0]}" class="w-4 h-4 rounded animate-fade-in">`;
                 }
             }
         });
 
-        // Inicializar estado dos botões
-        webview.addEventListener('dom-ready', () => {
-            updateNavigationButtons();
+        webview.addEventListener('new-window', (e) => {
+            e.preventDefault();
+            this.createTab(e.url);
         });
 
-        // Adicionar otimizações
-        optimizeWebview(webview);
-
-        // Limitar número máximo de abas para melhor performance
-        if (this.tabs.length > 20) {
-            this.closeOldestInactiveTab();
-        }
-
-        // Usar requestIdleCallback para atualizações não críticas
-        const updateTab = () => {
-            if (window.requestIdleCallback) {
-                window.requestIdleCallback(() => {
-                    this.updateTabInfo(webview, tab);
-                });
-            } else {
-                setTimeout(() => {
-                    this.updateTabInfo(webview, tab);
-                }, 0);
+        webview.addEventListener('did-fail-load', (e) => {
+            if (e.errorCode !== -3) { // -3 é cancelamento
+                console.error('Erro ao carregar:', e);
+                showNotification('Erro ao carregar página');
             }
-        };
+        });
+    }
 
-        webview.addEventListener('page-title-updated', updateTab);
-        webview.addEventListener('page-favicon-updated', updateTab);
+    updateNavigationButtons() {
+        const webview = this.getActiveWebview();
+        const backBtn = document.getElementById('back');
+        const forwardBtn = document.getElementById('forward');
+
+        if (webview && backBtn && forwardBtn) {
+            backBtn.disabled = !webview.canGoBack();
+            forwardBtn.disabled = !webview.canGoForward();
+        }
     }
 
     activateTab(tabId) {
-        // Verificar se os elementos existem antes de manipulá-los
-        const oldTab = this.activeTabId ? document.getElementById(this.activeTabId) : null;
-        const oldContent = this.activeTabId ? document.getElementById(`content-${this.activeTabId}`) : null;
-        const newTab = document.getElementById(tabId);
-        const newContent = document.getElementById(`content-${tabId}`);
+        // Desativar todas
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('[id^="content-"]').forEach(c => c.classList.add('hidden'));
 
-        // Desativar aba atual
-        if (oldTab && oldContent) {
-            oldTab.classList.remove('active');
-            oldContent.classList.remove('active');
-        }
+        // Ativar selecionada
+        const tab = document.getElementById(tabId);
+        const content = document.getElementById(`content-${tabId}`);
 
-        // Ativar nova aba
-        if (newTab && newContent) {
+        if (tab && content) {
+            tab.classList.add('active');
+            content.classList.remove('hidden');
             this.activeTabId = tabId;
-            newTab.classList.add('active');
-            newContent.classList.add('active');
 
-            // Atualizar URL bar
-            const webview = newContent.querySelector('webview');
-            if (webview && webview.getURL) {
+            const webview = content.querySelector('webview');
+            if (webview) {
                 try {
-                    this.urlBar.value = webview.getURL();
+                    // Tentar obter URL apenas se o webview estiver pronto
+                    if (webview.getURL) {
+                        const url = webview.getURL();
+                        if (url) {
+                            this.urlBar.value = url;
+                        }
+                    }
                 } catch (error) {
+                    // Webview ainda não está pronto, ignorar
                     console.log('Webview ainda não está pronto');
                 }
             }
@@ -476,23 +1294,62 @@ class TabSystem {
     closeTab(tabId) {
         const tab = document.getElementById(tabId);
         const content = document.getElementById(`content-${tabId}`);
-        const isActiveTab = tabId === this.activeTabId;
 
-        if (tab && content) {
-            // Remover elementos
-            tab.remove();
-            content.remove();
-
-            // Se fechou a aba ativa, ativar outra
-            if (isActiveTab) {
-                const remainingTabs = this.tabsContainer.querySelectorAll('.tab');
-                if (remainingTabs.length > 0) {
-                    this.activateTab(remainingTabs[remainingTabs.length - 1].id);
-                } else {
-                    this.createTab(); // Criar nova aba se não houver mais nenhuma
+        // Salvar aba fechada para reabrir
+        if (content) {
+            const webview = content.querySelector('webview');
+            if (webview && window.commandPalette) {
+                try {
+                    const url = webview.getURL();
+                    if (url) {
+                        window.commandPalette.saveClosedTab(url);
+                    }
+                } catch (e) {
+                    console.log('Não foi possível salvar aba fechada');
                 }
             }
         }
+
+        if (tab) tab.remove();
+        if (content) content.remove();
+
+        const remainingTabs = this.tabsContainer.querySelectorAll('.tab');
+        if (remainingTabs.length === 0) {
+            // Fechar janela se não houver mais abas
+            if (window.electronAPI) {
+                window.electronAPI.windowControl('close');
+            }
+        } else if (this.activeTabId === tabId) {
+            // Ativar aba adjacente
+            const tabs = Array.from(this.tabsContainer.querySelectorAll('.tab'));
+            const closedIndex = tabs.findIndex(t => t.id === tabId);
+            const nextTab = tabs[closedIndex] || tabs[closedIndex - 1] || tabs[0];
+            if (nextTab) {
+                this.activateTab(nextTab.id);
+            }
+        }
+    }
+
+    navigateTo(input) {
+        const webview = this.getActiveWebview();
+        if (!webview) return;
+
+        let url = input.trim();
+
+        // Se tem protocolo, usar direto
+        if (url.startsWith('http://') || url.startsWith('https://')) {
+            webview.loadURL(url);
+            return;
+        }
+
+        // Se tem ponto e não tem espaços, adicionar https
+        if (url.includes('.') && !url.includes(' ')) {
+            webview.loadURL('https://' + url);
+            return;
+        }
+
+        // Caso contrário, pesquisar no Google
+        webview.loadURL('https://www.google.com/search?q=' + encodeURIComponent(url));
     }
 
     getActiveWebview() {
@@ -500,1403 +1357,282 @@ class TabSystem {
         const content = document.getElementById(`content-${this.activeTabId}`);
         return content ? content.querySelector('webview') : null;
     }
-
-    setupTabDrag(tab) {
-        let isDragging = false;
-        let dragStartX = 0;
-        let dragStartY = 0;
-        let dragThreshold = 10; // Limiar para iniciar o arrasto
-        let hasExitedWindow = false;
-
-        tab.setAttribute('draggable', 'true');
-
-        tab.addEventListener('mousedown', (e) => {
-            dragStartX = e.clientX;
-            dragStartY = e.clientY;
-        });
-
-        tab.addEventListener('dragstart', (e) => {
-            isDragging = true;
-            e.dataTransfer.setDragImage(tab, 0, 0);
-            tab.classList.add('dragging');
-        });
-
-        tab.addEventListener('drag', (e) => {
-            if (!isDragging) return;
-
-            const distanceX = Math.abs(e.clientX - dragStartX);
-            const distanceY = Math.abs(e.clientY - dragStartY);
-
-            // Se ultrapassou o limiar de arrasto e saiu da janela
-            if (distanceX > dragThreshold || distanceY > dragThreshold) {
-                if (e.clientY < 0 || e.clientY > window.innerHeight ||
-                    e.clientX < 0 || e.clientX > window.innerWidth) {
-                    
-                    if (!hasExitedWindow) {
-                        hasExitedWindow = true;
-                        const tabId = tab.id;
-                        const webview = this.getWebviewByTabId(tabId);
-                        
-                        if (webview) {
-                            const bounds = {
-                                x: e.screenX - dragStartX,
-                                y: e.screenY - dragStartY
-                            };
-
-                            ipcRenderer.send('detach-tab', {
-                                url: webview.getURL(),
-                                bounds: bounds,
-                                title: webview.getTitle()
-                            });
-
-                            ipcRenderer.once('tab-detached', () => {
-                                this.closeTab(tabId);
-                            });
-                        }
-                    }
-                }
-            }
-        });
-
-        tab.addEventListener('dragend', () => {
-            isDragging = false;
-            hasExitedWindow = false;
-            tab.classList.remove('dragging');
-        });
-    }
-
-    getWebviewByTabId(tabId) {
-        const content = document.getElementById(`content-${tabId}`);
-        return content ? content.querySelector('webview') : null;
-    }
-
-    // Adicione este método para limpar abas antigas
-    closeOldestInactiveTab() {
-        const inactiveTabs = this.tabs.filter(tab => 
-            tab.id !== this.activeTabId && 
-            !tab.isPinned
-        );
-
-        if (inactiveTabs.length > 0) {
-            this.closeTab(inactiveTabs[0].id);
-        }
-    }
 }
 
-// Sistema de Favoritos
-class BookmarkSystem {
-    constructor() {
-        this.bookmarks = [];
-        this.bookmarkBtn = document.getElementById('bookmark');
-        this.bookmarksModal = document.getElementById('bookmarksModal');
-        this.bookmarksOverlay = document.getElementById('bookmarksOverlay');
-        this.closeBookmarksBtn = document.getElementById('closeBookmarks');
-        this.bookmarksList = document.getElementById('bookmarksList');
-        this.addBookmarkBtn = document.getElementById('addBookmark');
-        this.bookmarkTitleInput = document.getElementById('bookmarkTitle');
-        this.bookmarkUrlInput = document.getElementById('bookmarkUrl');
-        
-        this.init();
-    }
-
-    init() {
-        this.loadBookmarks();
-        this.setupEventListeners();
-    }
-
-    loadBookmarks() {
-        try {
-            const saved = localStorage.getItem('bookmarks');
-            this.bookmarks = saved ? JSON.parse(saved) : [];
-            this.renderBookmarks();
-        } catch (error) {
-            console.error('Erro ao carregar favoritos:', error);
-            this.bookmarks = [];
-        }
-    }
-
-    saveBookmarks() {
-        try {
-            localStorage.setItem('bookmarks', JSON.stringify(this.bookmarks));
-        } catch (error) {
-            console.error('Erro ao salvar favoritos:', error);
-        }
-    }
-
-    renderBookmarks() {
-        if (!this.bookmarksList) return;
-        
-        this.bookmarksList.innerHTML = '';
-        this.bookmarks.forEach((bookmark, index) => {
-            const bookmarkElement = document.createElement('div');
-            bookmarkElement.className = 'bookmark-item';
-            bookmarkElement.innerHTML = `
-                <div class="bookmark-info">
-                    <span class="bookmark-favicon">
-                        <span class="material-symbols-rounded">public</span>
-                    </span>
-                    <span class="bookmark-title">${this.escapeHtml(bookmark.title)}</span>
-                    <span class="bookmark-url">${this.escapeHtml(bookmark.url)}</span>
-                </div>
-                <div class="bookmark-actions">
-                    <button class="control-button delete-bookmark" data-index="${index}">
-                        <span class="material-symbols-rounded">delete</span>
-                    </button>
-                </div>
-            `;
-
-            // Adicionar evento de clique para abrir o favorito
-            bookmarkElement.addEventListener('click', (e) => {
-                if (!e.target.closest('.bookmark-actions')) {
-                    this.openBookmark(bookmark.url);
-                }
-            });
-
-            // Adicionar evento para deletar
-            const deleteBtn = bookmarkElement.querySelector('.delete-bookmark');
-            if (deleteBtn) {
-                deleteBtn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    this.removeBookmark(index);
-                });
-            }
-
-            this.bookmarksList.appendChild(bookmarkElement);
-        });
-
-        this.updateBookmarkButton();
-    }
-
-    escapeHtml(unsafe) {
-        return unsafe
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#039;");
-    }
-
-    openBookmark(url) {
-        const webview = window.tabSystem.getActiveWebview();
-        if (webview) {
-            webview.loadURL(url);
-            this.closeModal();
-        }
-    }
-
-    addBookmark(title, url) {
-        if (!title || !url) return false;
-        
-        try {
-            // Validar URL
-            new URL(url);
-            
-            // Verificar se já existe
-            const exists = this.bookmarks.some(b => b.url === url);
-            if (!exists) {
-                this.bookmarks.push({ title, url });
-                this.saveBookmarks();
-                this.renderBookmarks();
-                this.showNotification('Favorito adicionado');
-                return true;
-            }
-        } catch (error) {
-            console.error('URL inválida:', error);
-            return false;
-        }
-        return false;
-    }
-
-    removeBookmark(index) {
-        if (index >= 0 && index < this.bookmarks.length) {
-            this.bookmarks.splice(index, 1);
-            this.saveBookmarks();
-            this.renderBookmarks();
-            this.showNotification('Favorito removido');
-        }
-    }
-
-    setupEventListeners() {
-        // Botão de favorito
-        if (this.bookmarkBtn) {
-            this.bookmarkBtn.addEventListener('click', () => {
-                const webview = window.tabSystem.getActiveWebview();
-                if (webview) {
-                    // Esperar o webview estar pronto
-                    if (webview.isLoading()) {
-                        return;
-                    }
-
-                    try {
-                        const url = webview.getURL();
-                        const title = webview.getTitle() || 'Sem título';
-                        const isBookmarked = this.bookmarks.some(b => b.url === url);
-                        
-                        if (isBookmarked) {
-                            const index = this.bookmarks.findIndex(b => b.url === url);
-                            this.removeBookmark(index);
-                        } else {
-                            this.addBookmark(title, url);
-                        }
-                        
-                        // Atualizar ícone imediatamente
-                        this.updateBookmarkButton();
-                    } catch (error) {
-                        console.error('Erro ao adicionar favorito:', error);
-                    }
-                }
-            });
-
-            // Botão direito para abrir modal
-            this.bookmarkBtn.addEventListener('contextmenu', (e) => {
-                e.preventDefault();
-                this.showModal();
-            });
-        }
-
-        // Modal de favoritos
-        if (this.closeBookmarksBtn) {
-            this.closeBookmarksBtn.addEventListener('click', () => this.closeModal());
-        }
-
-        if (this.bookmarksOverlay) {
-            this.bookmarksOverlay.addEventListener('click', (e) => {
-                if (e.target === this.bookmarksOverlay) this.closeModal();
-            });
-        }
-
-        // Adicionar novo favorito manualmente
-        if (this.addBookmarkBtn) {
-            this.addBookmarkBtn.addEventListener('click', () => {
-                const title = this.bookmarkTitleInput.value.trim();
-                const url = this.bookmarkUrlInput.value.trim();
-                
-                if (title && url) {
-                    if (this.addBookmark(title, url)) {
-                        this.bookmarkTitleInput.value = '';
-                        this.bookmarkUrlInput.value = '';
-                    }
-                }
-            });
-        }
-
-        // Atualizar ícone quando o webview estiver pronto
-        document.addEventListener('webview-dom-ready', () => {
-            setTimeout(() => this.updateBookmarkButton(), 100);
-        });
-
-        // Observer para mudanças nas abas
-        if (window.tabSystem) {
-            const observer = new MutationObserver(() => {
-                setTimeout(() => this.updateBookmarkButton(), 100);
-            });
-
-            const tabsContainer = document.getElementById('tabs');
-            if (tabsContainer) {
-                observer.observe(tabsContainer, {
-                    childList: true,
-                    subtree: true,
-                    attributes: true,
-                    attributeFilter: ['class']
-                });
-            }
-        }
-    }
-
-    updateBookmarkButton() {
-        if (!this.bookmarkBtn) return;
-
-        const webview = window.tabSystem?.getActiveWebview();
-        if (!webview) return;
-
-        try {
-            if (webview.getURL) {
-                const url = webview.getURL();
-                if (url) {
-                    const isBookmarked = this.bookmarks.some(b => b.url === url);
-                    const icon = this.bookmarkBtn.querySelector('.material-symbols-rounded');
-                    if (icon) {
-                        icon.textContent = isBookmarked ? 'star' : 'star_outline';
-                        icon.classList.toggle('favorited', isBookmarked);
-                    }
-                }
-            }
-        } catch (error) {
-            console.log('Webview ainda não está pronto para atualizar favoritos');
-        }
-    }
-
-    closeModal() {
-        if (this.bookmarksModal) this.bookmarksModal.classList.remove('active');
-        if (this.bookmarksOverlay) this.bookmarksOverlay.classList.remove('active');
-    }
-
-    showModal() {
-        if (this.bookmarksModal) this.bookmarksModal.classList.add('active');
-        if (this.bookmarksOverlay) this.bookmarksOverlay.classList.add('active');
-    }
-
-    showNotification(message) {
-        // Remover notificação anterior se existir
-        const existingNotification = document.querySelector('.notification');
-        if (existingNotification) {
-            existingNotification.remove();
-        }
-
-        // Criar nova notificação
-        const notification = document.createElement('div');
-        notification.className = 'notification';
-        notification.innerHTML = `
-            <span class="material-symbols-rounded">star</span>
-            <span>${message}</span>
-        `;
-
-        document.body.appendChild(notification);
-        
-        // Mostrar notificação com animação
-        setTimeout(() => notification.classList.add('show'), 100);
-
-        // Remover notificação após 3 segundos
-        setTimeout(() => {
-            notification.classList.remove('show');
-            setTimeout(() => notification.remove(), 300);
-        }, 3000);
-    }
-}
-
-// Sistema de Histórico
-class HistorySystem {
-    constructor() {
-        this.history = [];
-        this.init();
-    }
-
-    init() {
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', () => this.setupSystem());
-        } else {
-            this.setupSystem();
-        }
-    }
-
-    setupSystem() {
-        this.historyBtn = document.getElementById('history');
-        this.historyModal = document.getElementById('historyModal');
-        this.historyOverlay = document.getElementById('historyOverlay');
-        this.closeHistoryBtn = document.getElementById('closeHistory');
-        this.clearHistoryBtn = document.getElementById('clearHistory');
-        this.historyList = document.getElementById('historyList');
-        this.historySearch = document.getElementById('historySearch');
-
-        this.loadHistory();
-        this.setupEventListeners();
-        this.setupWebviewListeners();
-    }
-
-    loadHistory() {
-        try {
-            const saved = localStorage.getItem('browserHistory');
-            this.history = saved ? JSON.parse(saved) : [];
-            this.renderHistory();
-        } catch (error) {
-            console.error('Erro ao carregar histórico:', error);
-            this.history = [];
-        }
-    }
-
-    renderHistory(searchTerm = '') {
-        if (!this.historyList) return;
-
-        this.historyList.innerHTML = '';
-        let currentDate = '';
-
-        const filteredHistory = searchTerm
-            ? this.history.filter(entry => 
-                entry.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                entry.url.toLowerCase().includes(searchTerm.toLowerCase())
-            )
-            : this.history;
-
-        filteredHistory.forEach(entry => {
-            const date = this.formatDate(entry.timestamp);
-
-            if (date !== currentDate) {
-                currentDate = date;
-                const dateHeader = document.createElement('div');
-                dateHeader.className = 'history-date-header';
-                dateHeader.textContent = date;
-                this.historyList.appendChild(dateHeader);
-            }
-
-            const historyItem = document.createElement('div');
-            historyItem.className = 'history-item';
-            
-            // Simplifica a exibição da URL
-            const displayUrl = this.getDisplayUrl(entry.url);
-
-            historyItem.innerHTML = `
-                <div class="history-info">
-                    <span class="history-favicon">
-                        <span class="material-symbols-rounded">public</span>
-                    </span>
-                    <div class="history-text">
-                        <span class="history-title">${this.escapeHtml(entry.title)}</span>
-                        <span class="history-url">${this.escapeHtml(displayUrl)}</span>
-                    </div>
-                </div>
-                <div class="history-time">
-                    ${new Date(entry.timestamp).toLocaleTimeString()}
-                </div>
-            `;
-
-            historyItem.addEventListener('click', () => {
-                const webview = window.tabSystem.getActiveWebview();
-                if (webview) {
-                    webview.loadURL(entry.url);
-                    this.closeModal();
-                }
-            });
-
-            this.historyList.appendChild(historyItem);
-        });
-    }
-
-    setupEventListeners() {
-        if (this.historyBtn) {
-            this.historyBtn.addEventListener('click', () => this.showModal());
-        }
-
-        if (this.closeHistoryBtn) {
-            this.closeHistoryBtn.addEventListener('click', () => this.closeModal());
-        }
-
-        if (this.historyOverlay) {
-            this.historyOverlay.addEventListener('click', (e) => {
-                if (e.target === this.historyOverlay) this.closeModal();
-            });
-        }
-
-        if (this.clearHistoryBtn) {
-            this.clearHistoryBtn.addEventListener('click', () => {
-                if (confirm('Tem certeza que deseja limpar todo o histórico?')) {
-                    this.clearHistory();
-                }
-            });
-        }
-
-        if (this.historySearch) {
-            this.historySearch.addEventListener('input', (e) => {
-                this.renderHistory(e.target.value.trim());
-            });
-        }
-    }
-
-    setupWebviewListeners() {
-        // Observar o TabSystem para detectar mudanças de aba
-        if (window.tabSystem) {
-            // Observar o container de conteúdo das abas
-            const tabsContent = document.getElementById('tabsContent');
-            if (!tabsContent) return;
-
-            // Configurar observer para novos webviews
-            const observer = new MutationObserver((mutations) => {
-                mutations.forEach((mutation) => {
-                    mutation.addedNodes.forEach((node) => {
-                        if (node.querySelector && node.querySelector('webview')) {
-                            this.attachWebviewListeners(node.querySelector('webview'));
-                        }
-                    });
-                });
-            });
-
-            observer.observe(tabsContent, {
-                childList: true,
-                subtree: true
-            });
-
-            // Anexar listeners aos webviews existentes
-            const existingWebviews = tabsContent.querySelectorAll('webview');
-            existingWebviews.forEach(webview => this.attachWebviewListeners(webview));
-        }
-    }
-
-    attachWebviewListeners(webview) {
-        if (!webview) return;
-
-        // Navegação normal
-        webview.addEventListener('did-navigate', (e) => {
-            if (e.url && !e.url.startsWith('about:')) {
-                const title = webview.getTitle() || 'Nova página';
-                // Simplifica a URL removendo parâmetros desnecessários
-                const simpleUrl = this.simplifyUrl(e.url);
-                this.addToHistory(simpleUrl, title);
-            }
-        });
-
-        // Navegação na mesma página (inclui pesquisas do Google)
-        webview.addEventListener('did-navigate-in-page', (e) => {
-            if (e.url && !e.url.startsWith('about:')) {
-                try {
-                    const url = new URL(e.url);
-                    // Verificar se é uma pesquisa do Google
-                    if (url.hostname.includes('google.com') && url.pathname.includes('/search')) {
-                        const searchParams = new URLSearchParams(url.search);
-                        const searchQuery = searchParams.get('q');
-                        if (searchQuery) {
-                            // Para pesquisas, mostra o termo pesquisado como título
-                            this.addToHistory(e.url, `Pesquisa: ${searchQuery}`);
-                        }
-                    } else {
-                        const title = webview.getTitle() || 'Nova página';
-                        const simpleUrl = this.simplifyUrl(e.url);
-                        this.addToHistory(simpleUrl, title);
-                    }
-                } catch (error) {
-                    console.error('Erro ao processar URL:', error);
-                }
-            }
-        });
-
-        // Atualização de título
-        webview.addEventListener('page-title-updated', (e) => {
-            const url = webview.getURL();
-            if (url && !url.startsWith('about:')) {
-                const simpleUrl = this.simplifyUrl(url);
-                this.addToHistory(simpleUrl, e.title);
-            }
-        });
-    }
-
-    addToHistory(url, title) {
-        const entry = {
-            url,
-            title: title || url,
-            timestamp: new Date().toISOString()
-        };
-
-        // Evitar duplicatas consecutivas
-        const lastEntry = this.history[0];
-        if (lastEntry && lastEntry.url === entry.url) {
-            return;
-        }
-
-        console.log('Salvando no histórico:', entry);
-        this.history.unshift(entry);
-
-        // Limitar o histórico a 1000 entradas
-        if (this.history.length > 1000) {
-            this.history = this.history.slice(0, 1000);
-        }
-
-        this.saveHistory();
-        this.renderHistory();
-    }
-
-    clearHistory() {
-        try {
-            // Limpa o array de histórico
-            this.history = [];
-            
-            // Salva o estado vazio no localStorage
-            this.saveHistory();
-            
-            // Atualiza a interface
-            this.renderHistory();
-            
-            // Mostra notificação de sucesso
-            this.showNotification('Histórico limpo com sucesso');
-            
-            // Fecha o modal após limpar
-            this.closeModal();
-        } catch (error) {
-            console.error('Erro ao limpar histórico:', error);
-            this.showNotification('Erro ao limpar histórico');
-        }
-    }
-
-    formatDate(dateString) {
-        const date = new Date(dateString);
-        const now = new Date();
-        const diff = now - date;
-
-        if (diff < 24 * 60 * 60 * 1000) {
-            return 'Hoje';
-        } else if (diff < 48 * 60 * 60 * 1000) {
-            return 'Ontem';
-        } else {
-            return date.toLocaleDateString();
-        }
-    }
-
-    escapeHtml(unsafe) {
-        return unsafe
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#039;");
-    }
-
-    saveHistory() {
-        try {
-            localStorage.setItem('browserHistory', JSON.stringify(this.history));
-        } catch (error) {
-            console.error('Erro ao salvar histórico:', error);
-        }
-    }
-
-    showModal() {
-        if (this.historyModal && this.historyOverlay) {
-            this.historyModal.classList.add('active');
-            this.historyOverlay.classList.add('active');
-            this.renderHistory();
-        }
-    }
-
-    closeModal() {
-        if (this.historyModal && this.historyOverlay) {
-            this.historyModal.classList.remove('active');
-            this.historyOverlay.classList.remove('active');
-        }
-    }
-
-    // Adicione este novo método à classe HistorySystem
-    simplifyUrl(url) {
-        try {
-            const urlObj = new URL(url);
-            // Remove parâmetros de rastreamento comuns
-            const cleanUrl = urlObj.origin + urlObj.pathname;
-            // Remove barras duplicadas e trailing slash
-            return cleanUrl.replace(/([^:]\/)\/+/g, "$1").replace(/\/$/, "");
-        } catch {
-            return url;
-        }
-    }
-
-    // Adicione este método para simplificar a exibição da URL
-    getDisplayUrl(url) {
-        try {
-            const urlObj = new URL(url);
-            // Remove 'www.' e mostra apenas o domínio
-            return urlObj.hostname.replace(/^www\./, '');
-        } catch {
-            return url;
-        }
-    }
-
-    // Adicione este método para mostrar notificações
-    showNotification(message) {
-        const existingNotification = document.querySelector('.notification');
-        if (existingNotification) {
-            existingNotification.remove();
-        }
-
-        const notification = document.createElement('div');
-        notification.className = 'notification';
-        notification.innerHTML = `
-            <span class="material-symbols-rounded">info</span>
-            <span>${message}</span>
-        `;
-
-        document.body.appendChild(notification);
-        setTimeout(() => notification.classList.add('show'), 100);
-        setTimeout(() => {
-            notification.classList.remove('show');
-            setTimeout(() => notification.remove(), 300);
-        }, 3000);
-    }
-}
-
-// Adicione esta nova classe
-class SidebarSystem {
-    constructor() {
-        this.sidebar = document.getElementById('sidebar');
-        this.sidebarApps = document.getElementById('sidebarApps');
-        this.addAppBtn = document.getElementById('addSidebarApp');
-        this.addAppModal = document.getElementById('addAppModal');
-        this.addAppOverlay = document.getElementById('addAppOverlay');
-        this.sidebarEnabled = document.getElementById('sidebarEnabled');
-        
-        this.apps = [];
-        this.init();
-    }
-
-    init() {
-        this.loadApps();
-        this.setupEventListeners();
-        this.applySidebarState();
-    }
-
-    loadApps() {
-        try {
-            const saved = localStorage.getItem('sidebarApps');
-            this.apps = saved ? JSON.parse(saved) : [];
-            this.renderApps();
-        } catch (error) {
-            console.error('Erro ao carregar apps:', error);
-            this.apps = [];
-        }
-    }
-
-    saveApps() {
-        localStorage.setItem('sidebarApps', JSON.stringify(this.apps));
-    }
-
-    renderApps() {
-        this.sidebarApps.innerHTML = '';
-        this.apps.forEach((app, index) => {
-            const appElement = document.createElement('div');
-            appElement.className = 'sidebar-app';
-            
-            // Função para obter o favicon do site
-            const getFavicon = (url) => {
-                try {
-                    const domain = new URL(url).hostname;
-                    return `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
-                } catch {
-                    return null;
-                }
-            };
-
-            const favicon = getFavicon(app.url);
-            const iconContent = favicon ? 
-                `<img src="${favicon}" alt="${app.name}">` :
-                `<span class="material-symbols-rounded">public</span>`;
-            
-            // Removido o título, mantendo apenas o ícone
-            appElement.innerHTML = iconContent;
-
-            // Adicionar evento de clique para abrir em nova aba
-            appElement.addEventListener('click', () => {
-                window.tabSystem.createTab(app.url);
-            });
-
-            // Botão direito para remover
-            appElement.addEventListener('contextmenu', (e) => {
-                e.preventDefault();
-                if (confirm(`Remover ${app.name} da sidebar?`)) {
-                    this.removeApp(index);
-                }
-            });
-
-            this.sidebarApps.appendChild(appElement);
-        });
-    }
-
-    setupEventListeners() {
-        // Botão de adicionar app
-        this.addAppBtn.addEventListener('click', () => {
-            this.addAppModal.classList.add('active');
-            this.addAppOverlay.classList.add('active');
-        });
-
-        // Toggle da sidebar
-        this.sidebarEnabled.addEventListener('change', (e) => {
-            this.sidebar.classList.toggle('active', e.target.checked);
-            localStorage.setItem('sidebarEnabled', e.target.checked);
-        });
-
-        // Salvar novo app
-        document.getElementById('saveApp').addEventListener('click', () => {
-            const name = document.getElementById('appName').value;
-            const url = document.getElementById('appUrl').value;
-
-            if (name && url) {
-                this.addApp(name, url);
-                this.closeAddAppModal();
-            }
-        });
-
-        // Fechar modal
-        document.getElementById('closeAddApp').addEventListener('click', () => {
-            this.closeAddAppModal();
-        });
-    }
-
-    addApp(name, url) {
-        this.apps.push({ name, url });
-        this.saveApps();
-        this.renderApps();
-    }
-
-    removeApp(index) {
-        this.apps.splice(index, 1);
-        this.saveApps();
-        this.renderApps();
-    }
-
-    closeAddAppModal() {
-        this.addAppModal.classList.remove('active');
-        this.addAppOverlay.classList.remove('active');
-        document.getElementById('appName').value = '';
-        document.getElementById('appUrl').value = '';
-    }
-
-    applySidebarState() {
-        const enabled = localStorage.getItem('sidebarEnabled') === 'true';
-        this.sidebarEnabled.checked = enabled;
-        this.sidebar.classList.toggle('active', enabled);
-    }
-}
-
-// Inicializar a sidebar junto com os outros sistemas
+// ===== INICIALIZAÇÃO =====
 document.addEventListener('DOMContentLoaded', () => {
-    // ... (outros sistemas) ...
-    window.sidebarSystem = new SidebarSystem();
-});
+    console.log('Inicializando navegador...');
 
-// Adicione esta nova classe
-class DownloadSystem {
-    constructor() {
-        this.downloads = new Map();
-        this.downloadHistory = [];
-        this.downloadsBtn = document.getElementById('downloads');
-        this.downloadsModal = document.getElementById('downloadsModal');
-        this.downloadsOverlay = document.getElementById('downloadsOverlay');
-        this.closeDownloadsBtn = document.getElementById('closeDownloads');
-        this.downloadsList = document.getElementById('downloadsList');
-        this.openDownloadsFolderBtn = document.getElementById('openDownloadsFolder');
-        
-        this.init();
-    }
+    // Controles da janela
+    const closeBtn = document.getElementById('closeBtn');
+    const minimizeBtn = document.getElementById('minimizeBtn');
+    const maximizeBtn = document.getElementById('maximizeBtn');
 
-    init() {
-        this.loadDownloadHistory();
-        this.setupEventListeners();
-    }
-
-    loadDownloadHistory() {
-        try {
-            const saved = localStorage.getItem('downloadHistory');
-            this.downloadHistory = saved ? JSON.parse(saved) : [];
-            this.renderDownloads();
-        } catch (error) {
-            console.error('Erro ao carregar histórico de downloads:', error);
-            this.downloadHistory = [];
-        }
-    }
-
-    saveDownloadHistory() {
-        localStorage.setItem('downloadHistory', JSON.stringify(this.downloadHistory));
-    }
-
-    setupEventListeners() {
-        // Botão de downloads
-        if (this.downloadsBtn) {
-            this.downloadsBtn.addEventListener('click', () => this.showModal());
-        }
-
-        // Fechar modal
-        if (this.closeDownloadsBtn) {
-            this.closeDownloadsBtn.addEventListener('click', () => this.closeModal());
-        }
-
-        // Abrir pasta de downloads
-        if (this.openDownloadsFolderBtn) {
-            this.openDownloadsFolderBtn.addEventListener('click', async () => {
-                const { shell } = require('electron');
-                const downloadsPath = await ipcRenderer.invoke('get-downloads-folder');
-                shell.openPath(downloadsPath);
-            });
-        }
-
-        // Eventos de download
-        ipcRenderer.on('download-started', (event, data) => {
-            this.addDownload(data);
-        });
-
-        ipcRenderer.on('download-updated', (event, data) => {
-            this.updateDownload(data);
-        });
-
-        ipcRenderer.on('download-completed', (event, data) => {
-            this.completeDownload(data);
+    if (closeBtn && window.electronAPI) {
+        closeBtn.addEventListener('click', () => {
+            window.electronAPI.windowControl('close');
         });
     }
 
-    addDownload(data) {
-        const download = {
-            id: data.id,
-            filename: data.filename,
-            url: data.url,
-            totalBytes: data.totalBytes,
-            receivedBytes: 0,
-            state: 'progressing',
-            startTime: new Date().toISOString()
-        };
-
-        this.downloads.set(data.id, download);
-        this.renderDownloads();
-        this.showNotification(`Iniciando download: ${data.filename}`);
+    if (minimizeBtn && window.electronAPI) {
+        minimizeBtn.addEventListener('click', () => {
+            window.electronAPI.windowControl('minimize');
+        });
     }
 
-    updateDownload(data) {
-        const download = this.downloads.get(data.id);
-        if (download) {
-            download.receivedBytes = data.receivedBytes;
-            download.state = data.state;
-            download.speed = data.speed;
-            download.paused = data.paused;
-            this.renderDownloads();
-        }
+    if (maximizeBtn && window.electronAPI) {
+        maximizeBtn.addEventListener('click', () => {
+            window.electronAPI.windowControl('maximize');
+        });
     }
 
-    completeDownload(data) {
-        const download = this.downloads.get(data.id);
-        if (download) {
-            download.state = data.state;
-            download.savePath = data.savePath;
-            download.endTime = new Date().toISOString();
-            
-            // Adicionar ao histórico
-            this.downloadHistory.unshift(download);
-            if (this.downloadHistory.length > 100) {
-                this.downloadHistory = this.downloadHistory.slice(0, 100);
+    // Inicializar ícones Lucide
+    if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+        console.log('Ícones inicializados');
+    }
+
+    // Inicializar sistema de abas
+    window.tabSystem = new TabSystem();
+    console.log('TabSystem inicializado');
+
+    // Botões de navegação
+    const backBtn = document.getElementById('back');
+    const forwardBtn = document.getElementById('forward');
+    const reloadBtn = document.getElementById('reload');
+
+    if (backBtn) {
+        backBtn.addEventListener('click', () => {
+            const webview = window.tabSystem.getActiveWebview();
+            if (webview && webview.canGoBack()) {
+                webview.goBack();
             }
-            
-            this.downloads.delete(data.id);
-            this.saveDownloadHistory();
-            this.renderDownloads();
-            
-            const status = data.state === 'completed' ? 'concluído' : 'falhou';
-            this.showNotification(`Download ${status}: ${download.filename}`);
-        }
+        });
     }
 
-    renderDownloads() {
-        if (!this.downloadsList) return;
-
-        this.downloadsList.innerHTML = '';
-
-        if (this.downloads.size === 0 && this.downloadHistory.length === 0) {
-            this.downloadsList.innerHTML = `
-                <div class="downloads-empty">
-                    <span class="material-symbols-rounded">download</span>
-                    <p>Nenhum download ainda</p>
-                </div>
-            `;
-            return;
-        }
-
-        // Downloads ativos
-        this.downloads.forEach(download => {
-            const progress = download.totalBytes 
-                ? Math.round((download.receivedBytes / download.totalBytes) * 100)
-                : 0;
-
-            const speed = download.speed 
-                ? `${(download.speed / (1024 * 1024)).toFixed(1)} MB/s`
-                : '';
-
-            const downloadItem = document.createElement('div');
-            downloadItem.className = 'download-item active';
-            downloadItem.innerHTML = `
-                <div class="download-info">
-                    <div class="download-icon">
-                        <span class="material-symbols-rounded">downloading</span>
-                    </div>
-                    <div class="download-details">
-                        <span class="download-filename">${download.filename}</span>
-                        <div class="download-progress">
-                            <div class="progress-bar">
-                                <div class="progress" style="width: ${progress}%"></div>
-                            </div>
-                            <span class="progress-text">${progress}%</span>
-                            <span class="download-speed">${speed}</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="download-actions">
-                    <button class="control-button cancel-download" title="Cancelar download">
-                        <span class="material-symbols-rounded">close</span>
-                    </button>
-                </div>
-            `;
-
-            downloadItem.querySelector('.cancel-download').addEventListener('click', () => {
-                ipcRenderer.send('cancel-download', download.id);
-            });
-
-            this.downloadsList.appendChild(downloadItem);
-        });
-
-        // Histórico de downloads
-        this.downloadHistory.forEach(download => {
-            const downloadItem = document.createElement('div');
-            downloadItem.className = `download-item ${download.state}`;
-            downloadItem.innerHTML = `
-                <div class="download-info">
-                    <div class="download-icon">
-                        <span class="material-symbols-rounded">
-                            ${download.state === 'completed' ? 'download_done' : 'error'}
-                        </span>
-                    </div>
-                    <div class="download-details">
-                        <span class="download-filename">${download.filename}</span>
-                        <span class="download-path">${download.savePath || ''}</span>
-                    </div>
-                </div>
-                <div class="download-actions">
-                    ${download.state === 'completed' ? `
-                        <button class="control-button open-folder" title="Abrir pasta">
-                            <span class="material-symbols-rounded">folder_open</span>
-                        </button>
-                    ` : ''}
-                </div>
-            `;
-
-            if (download.state === 'completed') {
-                downloadItem.querySelector('.open-folder').addEventListener('click', () => {
-                    const { shell } = require('electron');
-                    shell.showItemInFolder(download.savePath);
-                });
+    if (forwardBtn) {
+        forwardBtn.addEventListener('click', () => {
+            const webview = window.tabSystem.getActiveWebview();
+            if (webview && webview.canGoForward()) {
+                webview.goForward();
             }
-
-            this.downloadsList.appendChild(downloadItem);
         });
     }
 
-    showModal() {
-        if (this.downloadsModal && this.downloadsOverlay) {
-            this.downloadsModal.classList.add('active');
-            this.downloadsOverlay.classList.add('active');
-            this.renderDownloads();
-        }
-    }
-
-    closeModal() {
-        if (this.downloadsModal && this.downloadsOverlay) {
-            this.downloadsModal.classList.remove('active');
-            this.downloadsOverlay.classList.remove('active');
-        }
-    }
-
-    showNotification(message) {
-        const notification = document.createElement('div');
-        notification.className = 'notification';
-        notification.innerHTML = `
-            <span class="material-symbols-rounded">download</span>
-            <span>${message}</span>
-        `;
-
-        document.body.appendChild(notification);
-        setTimeout(() => notification.classList.add('show'), 100);
-        setTimeout(() => {
-            notification.classList.remove('show');
-            setTimeout(() => notification.remove(), 300);
-        }, 3000);
-    }
-}
-
-// Inicializar o sistema de downloads
-document.addEventListener('DOMContentLoaded', () => {
-    window.downloadSystem = new DownloadSystem();
-});
-
-// Adicione esta nova classe para os recursos de produtividade
-class ProductivityFeatures {
-    constructor() {
-        this.adBlockBtn = document.getElementById('adBlock');
-        this.screenshotBtn = document.getElementById('screenshot');
-        this.pipBtn = document.getElementById('pipMode');
-        this.incognitoBtn = document.getElementById('incognito');
-        
-        this.isAdBlockEnabled = localStorage.getItem('adBlockEnabled') === 'true';
-        
-        this.init();
-    }
-
-    init() {
-        this.setupAdBlock();
-        this.setupScreenshot();
-        this.setupPiP();
-        this.setupIncognito();
-    }
-
-    setupAdBlock() {
-        this.adBlockBtn.classList.toggle('active', this.isAdBlockEnabled);
-        
-        this.adBlockBtn.addEventListener('click', () => {
-            this.isAdBlockEnabled = !this.isAdBlockEnabled;
-            this.adBlockBtn.classList.toggle('active', this.isAdBlockEnabled);
-            localStorage.setItem('adBlockEnabled', this.isAdBlockEnabled);
-            
+    if (reloadBtn) {
+        reloadBtn.addEventListener('click', () => {
             const webview = window.tabSystem.getActiveWebview();
             if (webview) {
                 webview.reload();
             }
         });
+    }
 
-        // Injetar bloqueador de anúncios em cada webview
-        document.addEventListener('webview-created', (e) => {
-            const webview = e.detail;
-            if (this.isAdBlockEnabled) {
-                webview.executeJavaScript(`
-                    // Código simples de bloqueio de anúncios
-                    function blockAds() {
-                        const adSelectors = [
-                            'ins.adsbygoogle',
-                            '[id^="google_ads_"]',
-                            '.advertisement',
-                            '.ad-container',
-                            '[class*="ad-"]',
-                            '[id*="ad-"]'
-                        ];
-                        
-                        const elements = document.querySelectorAll(adSelectors.join(','));
-                        elements.forEach(el => el.style.display = 'none');
-                    }
-                    
-                    blockAds();
-                    new MutationObserver(blockAds).observe(document.body, {
-                        childList: true,
-                        subtree: true
-                    });
-                `);
-            }
+    // Botão de favoritos
+    const bookmarkBtn = document.getElementById('bookmark');
+    if (bookmarkBtn) {
+        bookmarkBtn.addEventListener('click', () => {
+            window.tabSystem.createInternalTab('bookmarks');
         });
     }
 
-    setupScreenshot() {
-        this.screenshotBtn.addEventListener('click', async () => {
-            const webview = window.tabSystem.getActiveWebview();
-            if (webview) {
-                try {
-                    const image = await webview.capturePage();
-                    const dataUrl = image.toDataURL();
-                    
-                    // Criar preview
-                    const preview = document.createElement('div');
-                    preview.className = 'screenshot-preview';
-                    preview.innerHTML = `
-                        <img src="${dataUrl}" alt="Screenshot">
-                        <div class="screenshot-actions">
-                            <button class="control-button" id="saveScreenshot">
-                                <span class="material-symbols-rounded">save</span>
-                            </button>
-                            <button class="control-button" id="copyScreenshot">
-                                <span class="material-symbols-rounded">content_copy</span>
-                            </button>
-                            <button class="control-button" id="closeScreenshot">
-                                <span class="material-symbols-rounded">close</span>
-                            </button>
-                        </div>
-                    `;
-                    
-                    document.body.appendChild(preview);
-                    
-                    // Eventos dos botões
-                    preview.querySelector('#saveScreenshot').addEventListener('click', async () => {
-                        try {
-                            const { filePath } = await ipcRenderer.invoke('show-save-dialog', {
-                                defaultPath: 'screenshot.png',
-                                filters: [{ name: 'Images', extensions: ['png'] }]
-                            });
-                            
-                            if (filePath) {
-                                await ipcRenderer.invoke('save-screenshot', {
-                                    filePath,
-                                    dataUrl: image.toDataURL()
-                                });
-                            }
-                        } catch (error) {
-                            console.error('Erro ao salvar screenshot:', error);
+    // Botão de histórico
+    const historyBtn = document.getElementById('history');
+    if (historyBtn) {
+        historyBtn.addEventListener('click', () => {
+            window.tabSystem.createInternalTab('history');
+        });
+    }
+
+    // Botão de downloads
+    const downloadsBtn = document.getElementById('downloads');
+    if (downloadsBtn) {
+        downloadsBtn.addEventListener('click', () => {
+            window.tabSystem.createInternalTab('downloads');
+        });
+    }
+
+    // Botão de configurações
+    const settingsBtn = document.getElementById('settings');
+    if (settingsBtn) {
+        settingsBtn.addEventListener('click', () => {
+            window.tabSystem.createInternalTab('settings');
+        });
+    }
+
+    // Botão de command palette
+    const commandPaletteBtn = document.getElementById('commandPaletteBtn');
+    if (commandPaletteBtn) {
+        commandPaletteBtn.addEventListener('click', () => {
+            window.commandPalette?.show();
+        });
+    }
+
+    // Navegação com Alt + Setas
+    document.addEventListener('keydown', (e) => {
+        if (e.altKey && e.key === 'ArrowLeft') {
+            e.preventDefault();
+            const webview = window.tabSystem?.getActiveWebview();
+            if (webview && webview.canGoBack()) {
+                webview.goBack();
+            }
+        }
+        if (e.altKey && e.key === 'ArrowRight') {
+            e.preventDefault();
+            const webview = window.tabSystem?.getActiveWebview();
+            if (webview && webview.canGoForward()) {
+                webview.goForward();
+            }
+        }
+    });
+
+    // Inicializar sistemas adicionais
+    window.commandPalette = new CommandPalette();
+    window.bookmarkSystem = new BookmarkSystem();
+    window.historySystem = new HistorySystem();
+    window.suggestionSystem = new SuggestionSystem();
+    window.mouseGestures = new MouseGestures();
+
+    console.log('Navegador inicializado com sucesso!');
+    showNotification('CleanBrowser iniciado!', 'success');
+});
+
+// ===== FUNÇÕES DE CONFIGURAÇÕES =====
+function loadSettings() {
+    const settings = JSON.parse(localStorage.getItem('browserSettings') || '{"homePage":"https://google.com","searchEngine":"google"}');
+
+    const homePageInput = document.getElementById('homePageInput');
+    const searchEngineSelect = document.getElementById('searchEngineSelect');
+
+    if (homePageInput) homePageInput.value = settings.homePage;
+    if (searchEngineSelect) searchEngineSelect.value = settings.searchEngine;
+}
+
+function saveSettings() {
+    const homePageInput = document.getElementById('homePageInput');
+    const searchEngineSelect = document.getElementById('searchEngineSelect');
+
+    const settings = {
+        homePage: homePageInput?.value || 'https://google.com',
+        searchEngine: searchEngineSelect?.value || 'google'
+    };
+
+    localStorage.setItem('browserSettings', JSON.stringify(settings));
+    closeModal('settings');
+    showNotification('Configurações salvas!');
+}
+
+function showNotification(message, type = 'success') {
+    const icons = {
+        success: 'check-circle',
+        error: 'x-circle',
+        info: 'info',
+        warning: 'alert-triangle'
+    };
+
+    const colors = {
+        success: 'text-green-500',
+        error: 'text-red-500',
+        info: 'text-blue-500',
+        warning: 'text-yellow-500'
+    };
+
+    const notification = document.createElement('div');
+    notification.className = 'fixed bottom-5 right-5 bg-dark-elevated border border-dark-border text-dark-text px-5 py-3 rounded-xl shadow-2xl z-[200] transition-all flex items-center gap-3 animate-slide-in';
+    notification.style.transform = 'translateY(20px)';
+    notification.style.opacity = '0';
+    
+    notification.innerHTML = `
+        <i data-lucide="${icons[type]}" class="w-5 h-5 ${colors[type]} flex-shrink-0"></i>
+        <span class="text-sm font-medium">${message}</span>
+        <button class="ml-2 icon-btn w-6 h-6 rounded-md flex items-center justify-center" onclick="this.parentElement.remove()">
+            <i data-lucide="x" class="w-3 h-3 text-dark-secondary"></i>
+        </button>
+    `;
+    
+    document.body.appendChild(notification);
+
+    if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+    }
+
+    // Animar entrada
+    requestAnimationFrame(() => {
+        notification.style.transform = 'translateY(0)';
+        notification.style.opacity = '1';
+    });
+
+    // Auto-remover
+    setTimeout(() => {
+        notification.style.opacity = '0';
+        notification.style.transform = 'translateY(20px)';
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+}
+
+// Sistema de gestos do mouse
+class MouseGestures {
+    constructor() {
+        this.isDrawing = false;
+        this.startX = 0;
+        this.startY = 0;
+        this.threshold = 100;
+        this.setupListeners();
+    }
+
+    setupListeners() {
+        document.addEventListener('mousedown', (e) => {
+            // Botão do meio ou botão direito
+            if (e.button === 1 || e.button === 2) {
+                this.isDrawing = true;
+                this.startX = e.clientX;
+                this.startY = e.clientY;
+            }
+        });
+
+        document.addEventListener('mouseup', (e) => {
+            if (this.isDrawing) {
+                this.isDrawing = false;
+                const deltaX = e.clientX - this.startX;
+                const deltaY = e.clientY - this.startY;
+
+                // Gesto horizontal
+                if (Math.abs(deltaX) > this.threshold && Math.abs(deltaY) < 50) {
+                    if (deltaX > 0) {
+                        // Swipe direita - Avançar
+                        const webview = window.tabSystem?.getActiveWebview();
+                        if (webview && webview.canGoForward()) {
+                            webview.goForward();
+                            showNotification('Avançar', 'info');
                         }
-                    });
-                    
-                    preview.querySelector('#copyScreenshot').addEventListener('click', async () => {
-                        await ipcRenderer.invoke('copy-to-clipboard', image.toDataURL());
-                    });
-                    
-                    preview.querySelector('#closeScreenshot').addEventListener('click', () => {
-                        preview.remove();
-                    });
-                    
-                    // Auto-remover após 5 segundos
-                    setTimeout(() => preview.remove(), 5000);
-                } catch (error) {
-                    console.error('Erro ao capturar screenshot:', error);
+                    } else {
+                        // Swipe esquerda - Voltar
+                        const webview = window.tabSystem?.getActiveWebview();
+                        if (webview && webview.canGoBack()) {
+                            webview.goBack();
+                            showNotification('Voltar', 'info');
+                        }
+                    }
+                }
+
+                // Gesto vertical
+                if (Math.abs(deltaY) > this.threshold && Math.abs(deltaX) < 50) {
+                    if (deltaY < 0) {
+                        // Swipe cima - Nova aba
+                        window.tabSystem?.createTab();
+                        showNotification('Nova aba', 'success');
+                    } else {
+                        // Swipe baixo - Fechar aba
+                        window.tabSystem?.closeTab(window.tabSystem.activeTabId);
+                    }
                 }
             }
         });
-    }
 
-    setupPiP() {
-        this.pipBtn.addEventListener('click', () => {
-            const webview = window.tabSystem.getActiveWebview();
-            if (webview) {
-                webview.executeJavaScript(`
-                    // Encontrar o primeiro vídeo na página
-                    const video = document.querySelector('video');
-                    if (video) {
-                        video.requestPictureInPicture();
-                    }
-                `);
+        document.addEventListener('mousemove', (e) => {
+            if (this.isDrawing) {
+                e.preventDefault();
             }
         });
     }
-
-    setupIncognito() {
-        if (this.incognitoBtn) {
-            this.incognitoBtn.addEventListener('click', () => {
-                ipcRenderer.send('create-incognito-window');
-            });
-        }
-
-        // Verificar se é uma janela anônima
-        const urlParams = new URLSearchParams(window.location.search);
-        const isIncognito = urlParams.get('incognito') === 'true';
-
-        if (isIncognito) {
-            // Aplicar estilo de modo anônimo
-            document.documentElement.classList.add('incognito-mode');
-            
-            // Adicionar indicador de modo anônimo após os controles da janela
-            const titlebar = document.querySelector('.titlebar');
-            const windowControls = titlebar.querySelector('.window-controls');
-            const incognitoIndicator = document.createElement('div');
-            incognitoIndicator.className = 'incognito-indicator';
-            incognitoIndicator.innerHTML = `<span>Modo Anônimo</span>`;
-            windowControls.insertAdjacentElement('afterend', incognitoIndicator);
-
-            // Desabilitar salvamento de histórico
-            window.historySystem = {
-                addToHistory: () => {}, // Função vazia para não salvar histórico
-                loadHistory: () => {},
-                saveHistory: () => {},
-                renderHistory: () => {}
-            };
-
-            // Desabilitar salvamento de favoritos
-            window.bookmarkSystem = {
-                addBookmark: () => {},
-                loadBookmarks: () => {},
-                saveBookmarks: () => {},
-                renderBookmarks: () => {},
-                updateBookmarkButton: () => {}
-            };
-
-            // Desabilitar salvamento de downloads
-            window.downloadSystem = {
-                ...window.downloadSystem,
-                saveDownloadHistory: () => {},
-                loadDownloadHistory: () => {}
-            };
-
-            // Limpar dados ao fechar
-            window.addEventListener('beforeunload', () => {
-                const webview = window.tabSystem?.getActiveWebview();
-                if (webview) {
-                    webview.clearHistory();
-                    webview.clearCache();
-                }
-            });
-
-            // Configurar webviews para modo privado
-            document.addEventListener('webview-created', (e) => {
-                const webview = e.detail;
-                webview.partition = 'incognito'; // Usar sessão privada
-                webview.setZoomLevel(0); // Resetar zoom
-                webview.addEventListener('dom-ready', () => {
-                    webview.executeJavaScript(`
-                        // Limpar storage
-                        localStorage.clear();
-                        sessionStorage.clear();
-                        
-                        // Bloquear rastreadores
-                        navigator.serviceWorker.getRegistrations().then(registrations => {
-                            registrations.forEach(registration => registration.unregister());
-                        });
-                        
-                        // Desabilitar cache
-                        if (window.caches) {
-                            caches.keys().then(names => {
-                                names.forEach(name => caches.delete(name));
-                            });
-                        }
-                    `);
-                });
-            });
-        }
-    }
 }
-
-// Inicializar os recursos de produtividade
-document.addEventListener('DOMContentLoaded', () => {
-    window.productivityFeatures = new ProductivityFeatures();
-});
-
-// Adicione este código junto com os outros event listeners
-document.addEventListener('DOMContentLoaded', () => {
-    const toolsBtn = document.getElementById('toolsBtn');
-    const toolsMenu = document.getElementById('toolsMenu');
-
-    // Abrir/fechar menu ao clicar
-    toolsBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        toolsMenu.classList.toggle('active');
-    });
-
-    // Fechar menu ao clicar fora
-    document.addEventListener('click', (e) => {
-        if (!toolsMenu.contains(e.target) && !toolsBtn.contains(e.target)) {
-            toolsMenu.classList.remove('active');
-        }
-    });
-});
-
-// Adicione estas funções de otimização
-function optimizeWebview(webview) {
-    webview.addEventListener('dom-ready', () => {
-        // Otimizações de renderização
-        webview.executeJavaScript(`
-            // Otimizar scrolling
-            document.documentElement.style.scrollBehavior = 'smooth';
-            
-            // Otimizar animações
-            document.body.style.backfaceVisibility = 'hidden';
-            document.body.style.transform = 'translateZ(0)';
-            document.body.style.perspective = '1000px';
-            
-            // Desabilitar animações quando não visível
-            document.addEventListener('visibilitychange', () => {
-                document.body.style.animationPlayState = 
-                    document.hidden ? 'paused' : 'running';
-            });
-
-            // Lazy loading de imagens
-            document.querySelectorAll('img').forEach(img => {
-                if (!img.loading) img.loading = 'lazy';
-            });
-
-            // Otimizar fonte
-            document.documentElement.style.fontDisplay = 'swap';
-        `);
-
-        // Configurar zoom para evitar problemas de renderização
-        webview.setZoomLevel(0);
-        webview.setVisualZoomLevelLimits(1, 3);
-    });
-
-    // Limitar recursos em segundo plano
-    webview.addEventListener('visibility-change', (e) => {
-        if (e.isVisible) {
-            webview.executeJavaScript(`
-                document.body.style.animationPlayState = 'running';
-                document.body.style.opacity = '1';
-            `);
-        } else {
-            webview.executeJavaScript(`
-                document.body.style.animationPlayState = 'paused';
-                document.body.style.opacity = '0.1';
-            `);
-        }
-    });
-}
-
-// Adicione este código no início do arquivo
-ipcRenderer.on('create-tab', (event, { url, title }) => {
-    if (window.tabSystem) {
-        window.tabSystem.createTab(url);
-    }
-});

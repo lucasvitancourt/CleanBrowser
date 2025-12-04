@@ -3,345 +3,617 @@
 <head>
     <title>Clean Browser</title>
     <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: https: http:;">
-    <link href="https://fonts.googleapis.com/icon?family=Material+Symbols+Rounded" rel="stylesheet">
-    <link rel="stylesheet" href="styles/main.css">
-    <style>
-        
-    </style>
-</head>
-<body>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
     <script>
-        if (!localStorage.getItem('browserSettings')) {
-            localStorage.setItem('browserSettings', JSON.stringify({
-                theme: 'dark',
-                homePage: 'https://google.com',
-                searchEngine: 'google'
-            }));
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'dark-bg': '#1e1e1e',
+                        'dark-surface': '#2d2d30',
+                        'dark-elevated': '#3e3e42',
+                        'dark-border': '#3e3e42',
+                        'dark-text': '#e4e4e7',
+                        'dark-secondary': '#a1a1aa',
+                        'dark-accent': '#71717a',
+                        'dark-accent-hover': '#52525b',
+                        'dark-red': '#ef4444',
+                        'dark-yellow': '#f59e0b',
+                        'dark-green': '#10b981',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+            overflow: hidden;
+            user-select: none;
         }
 
-        const savedSettings = JSON.parse(localStorage.getItem('browserSettings'));
-        document.documentElement.setAttribute('data-theme', savedSettings.theme);
-    </script>
-    <div class="titlebar">
-        <div class="window-controls">
-            <button class="window-control-button close-button" id="closeBtn" title="Fechar"></button>
-            <button class="window-control-button minimize-button" id="minimizeBtn" title="Minimizar"></button>
-            <button class="window-control-button maximize-button" id="maximizeBtn" title="Maximizar"></button>
-        </div>
-        
-        <div class="tabs-container">
-            <div class="tabs" id="tabs"></div>
-            <button class="new-tab-button" id="newTabBtn">
-                <span class="material-symbols-rounded">add</span>
-            </button>
-        </div>
-    </div>
+        .window-drag {
+            -webkit-app-region: drag;
+        }
 
-    <div class="browser-layout">
-        <div class="sidebar" id="sidebar">
-            <div class="sidebar-apps" id="sidebarApps">
-            </div>
-            <div class="sidebar-add">
-                <button class="control-button" id="addSidebarApp" title="Adicionar App">
-                    <span class="material-symbols-rounded">add</span>
-                </button>
-            </div>
-        </div>
-        
-        <div class="browser-main">
-            <div class="toolbar">
-                <div class="browser-controls">
-                    <button class="control-button" id="back" title="Voltar">
-                        <span class="material-symbols-rounded">arrow_back</span>
-                    </button>
-                    <button class="control-button" id="forward" title="Avançar">
-                        <span class="material-symbols-rounded">arrow_forward</span>
-                    </button>
-                    <button class="control-button" id="reload" title="Recarregar">
-                        <span class="material-symbols-rounded">refresh</span>
-                    </button>
-                    <button class="control-button" id="bookmark" title="Adicionar aos Favoritos">
-                        <span class="material-symbols-rounded">star_outline</span>
-                    </button>
-                </div>
-                <input type="text" class="url-bar" id="urlBar" placeholder="Digite uma URL ou pesquise">
-                <div class="settings-controls">
-                    <div class="tools-dropdown">
-                        <button class="control-button" id="toolsBtn" title="Ferramentas">
-                            <span class="material-symbols-rounded">build</span>
-                        </button>
-                        <div class="tools-menu" id="toolsMenu">
-                            <button class="tool-item" id="adBlock" title="Ad Block">
-                                <span class="material-symbols-rounded">block</span>
-                                <span>Ad Block</span>
-                            </button>
-                            <button class="tool-item" id="screenshot" title="Captura de Tela">
-                                <span class="material-symbols-rounded">screenshot</span>
-                                <span>Captura de Tela</span>
-                            </button>
-                            <button class="tool-item" id="pipMode" title="Picture-in-Picture">
-                                <span class="material-symbols-rounded">picture_in_picture_alt</span>
-                                <span>Picture-in-Picture</span>
-                            </button>
-                            <div class="tool-divider"></div>
-                            <button class="tool-item" id="incognito" title="Nova Janela Anônima">
-                                <span class="material-symbols-rounded">visibility_off</span>
-                                <span>Modo Anônimo</span>
-                            </button>
-                        </div>
-                    </div>
-                    <button class="control-button" id="history" title="Histórico">
-                        <span class="material-symbols-rounded">history</span>
-                    </button>
-                    <button class="control-button" id="downloads" title="Downloads">
-                        <span class="material-symbols-rounded">download</span>
-                    </button>
-                    <button class="control-button" id="settings" title="Configurações">
-                        <span class="material-symbols-rounded">settings</span>
-                    </button>
-                </div>
-            </div>
+        .window-no-drag {
+            -webkit-app-region: no-drag;
+        }
 
-            <div class="tabs-content" id="tabsContent"></div>
-        </div>
-    </div>
+        webview {
+            width: 100%;
+            height: 100%;
+        }
 
-    <div class="modal-overlay" id="settingsOverlay">
-        <div class="settings-modal" id="settingsModal">
-            <div class="settings-header">
-                <h2>Configurações</h2>
-                <button class="control-button" id="closeSettings">
-                    <span class="material-symbols-rounded">close</span>
-                </button>
-            </div>
-            
-            <div class="settings-section">
-                <h3>Tema</h3>
-                <div class="theme-options">
-                    <div class="theme-option" data-theme="light">
-                        <span class="material-symbols-rounded">light_mode</span>
-                        Claro
-                    </div>
-                    <div class="theme-option active" data-theme="dark">
-                        <span class="material-symbols-rounded">dark_mode</span>
-                        Escuro
-                    </div>
-                    <div class="theme-option" data-theme="purple">
-                        <span class="material-symbols-rounded">palette</span>
-                        Roxo
-                    </div>
-                </div>
-            </div>
+        .tab {
+            transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            border-radius: 8px 8px 0 0;
+            cursor: grab;
+        }
 
-            <div class="settings-section">
-                <h3>Página Inicial</h3>
-                <input type="text" class="settings-input" id="homePageInput" placeholder="https://google.com">
-            </div>
+        .tab:active {
+            cursor: grabbing;
+        }
 
-            <div class="settings-section">
-                <h3>Motor de Busca Padrão</h3>
-                <select class="settings-input" id="searchEngineSelect">
-                    <option value="google">Google</option>
-                    <option value="duckduckgo">DuckDuckGo</option>
-                    <option value="bing">Bing</option>
-                </select>
-            </div>
+        .tab::before {
+            content: '';
+            position: absolute;
+            right: 0;
+            top: 25%;
+            height: 50%;
+            width: 1px;
+            background: rgba(255, 255, 255, 0.1);
+        }
 
-            <div class="settings-section">
-                <h3>Sidebar</h3>
-                <div class="settings-option">
-                    <label class="switch">
-                        <input type="checkbox" id="sidebarEnabled">
-                        <span class="slider round"></span>
-                    </label>
-                    <span>Habilitar Sidebar</span>
-                </div>
-            </div>
+        .tab:last-child::before,
+        .tab.active::before,
+        .tab.active + .tab::before {
+            display: none;
+        }
 
-            <button class="settings-button" id="saveSettings">Salvar Configurações</button>
-        </div>
-    </div>
+        .tab:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
 
-    <div class="modal-overlay" id="bookmarksOverlay">
-        <div class="settings-modal bookmarks-modal" id="bookmarksModal">
-            <div class="settings-header">
-                <h2>Favoritos</h2>
-                <button class="control-button" id="closeBookmarks">
-                    <span class="material-symbols-rounded">close</span>
-                </button>
-            </div>
-            
-            <div class="bookmarks-list" id="bookmarksList">
-            </div>
+        body.light-theme .tab::before {
+            background: rgba(0, 0, 0, 0.1);
+        }
 
-            <div class="bookmarks-add">
-                <input type="text" class="settings-input" id="bookmarkTitle" placeholder="Título">
-                <input type="text" class="settings-input" id="bookmarkUrl" placeholder="URL">
-                <button class="settings-button" id="addBookmark">Adicionar Favorito</button>
-            </div>
-        </div>
-    </div>
+        .tab.active {
+            background: #2d2d30;
+            box-shadow: 0 -2px 0 0 #71717a inset;
+        }
 
-    <div class="modal-overlay" id="historyOverlay">
-        <div class="settings-modal history-modal" id="historyModal">
-            <div class="settings-header">
-                <h2>Histórico</h2>
-                <div class="history-actions">
-                    <button class="control-button" id="clearHistory" title="Limpar Histórico">
-                        <span class="material-symbols-rounded">delete</span>
-                    </button>
-                    <button class="control-button" id="closeHistory">
-                        <span class="material-symbols-rounded">close</span>
-                    </button>
-                </div>
-            </div>
-            
-            <div class="history-search">
-                <input type="text" class="settings-input" id="historySearch" placeholder="Pesquisar no histórico">
-            </div>
+        .tab.drag-over-left {
+            border-left: 2px solid #71717a;
+        }
 
-            <div class="history-list" id="historyList">
-            </div>
-        </div>
-    </div>
+        .tab.drag-over-right {
+            border-right: 2px solid #71717a;
+        }
 
-    <div class="modal-overlay" id="addAppOverlay">
-        <div class="settings-modal" id="addAppModal">
-            <div class="settings-header">
-                <h2>Adicionar App à Sidebar</h2>
-                <button class="control-button" id="closeAddApp">
-                    <span class="material-symbols-rounded">close</span>
-                </button>
-            </div>
-            
-            <div class="add-app-form">
-                <input type="text" class="settings-input" id="appName" placeholder="Nome do App">
-                <input type="text" class="settings-input" id="appUrl" placeholder="URL do App">
-                <button class="settings-button" id="saveApp">Adicionar App</button>
-            </div>
-        </div>
-    </div>
+        /* Tema Claro */
+        body.light-theme {
+            background: #f5f5f5;
+            color: #1a1a1a;
+        }
 
-    <div class="modal-overlay" id="downloadsOverlay">
-        <div class="settings-modal downloads-modal" id="downloadsModal">
-            <div class="settings-header">
-                <h2>Downloads</h2>
-                <div class="downloads-actions">
-                    <button class="control-button" id="openDownloadsFolder" title="Abrir Pasta de Downloads">
-                        <span class="material-symbols-rounded">folder_open</span>
-                    </button>
-                    <button class="control-button" id="closeDownloads">
-                        <span class="material-symbols-rounded">close</span>
-                    </button>
-                </div>
-            </div>
-            
-            <div class="downloads-list" id="downloadsList">
-            </div>
-        </div>
-    </div>
+        body.light-theme .bg-dark-bg {
+            background: #ffffff !important;
+        }
 
-    <div class="pip-container" id="pipContainer">
-        <div class="pip-header">
-            <span class="pip-title">Picture in Picture</span>
-            <button class="control-button" id="closePip">
-                <span class="material-symbols-rounded">close</span>
-            </button>
-        </div>
-        <div class="pip-content" id="pipContent"></div>
-    </div>
+        body.light-theme .bg-dark-surface {
+            background: #f5f5f5 !important;
+        }
 
-    <script src="renderer.js">
+        body.light-theme .bg-dark-elevated {
+            background: #e8e8e8 !important;
+        }
 
-    </script>
+        body.light-theme .border-dark-border {
+            border-color: #d0d0d0 !important;
+        }
 
-    <style>
-    /* Estilos do Histórico */
-    .history-modal {
-        max-width: 800px;
-    }
+        body.light-theme .text-dark-text {
+            color: #1a1a1a !important;
+        }
 
-    .history-search {
-        margin-bottom: 20px;
-    }
+        body.light-theme .text-dark-secondary {
+            color: #666666 !important;
+        }
 
-    .history-list {
-        max-height: 500px;
-        overflow-y: auto;
-        padding: 0 4px;
-    }
+        body.light-theme .tab {
+            background: #e8e8e8;
+        }
 
-    .history-date-header {
-        padding: 12px 8px;
-        font-weight: 600;
-        color: var(--text-color);
-        border-bottom: 1px solid var(--border-color);
-        margin-bottom: 8px;
-    }
+        body.light-theme .tab:hover {
+            background: #d0d0d0;
+        }
 
-    .history-item {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 12px;
-        border-radius: 8px;
-        background: var(--surface-color);
-        margin-bottom: 8px;
-        cursor: pointer;
-        transition: all 0.2s ease;
-    }
+        body.light-theme .tab.active {
+            background: #ffffff;
+            box-shadow: 0 -2px 0 0 #71717a inset;
+        }
 
-    .history-item:hover {
-        background: var(--control-hover);
-        transform: translateX(4px);
-    }
+        body.light-theme .icon-btn:hover {
+            background: rgba(0, 0, 0, 0.08);
+        }
 
-    .history-info {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        flex: 1;
-    }
+        body.light-theme ::-webkit-scrollbar-thumb {
+            background: rgba(0, 0, 0, 0.2);
+        }
 
-    .history-favicon {
-        width: 16px;
-        height: 16px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
+        .icon-btn {
+            transition: all 0.15s ease;
+        }
 
-    .history-text {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-    }
+        .icon-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
 
-    .history-title {
-        font-weight: 500;
-        color: var(--text-color);
-    }
+        .icon-btn:active {
+            transform: scale(0.95);
+            background: rgba(255, 255, 255, 0.15);
+        }
 
-    .history-url {
-        color: var(--text-secondary);
-        font-size: 12px;
-        max-width: 400px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
+        .icon-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
 
-    .history-time {
-        color: var(--text-secondary);
-        font-size: 12px;
-        min-width: 80px;
-        text-align: right;
-    }
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
 
-    .history-actions {
-        display: flex;
-        gap: 8px;
-    }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .animate-spin {
+            animation: spin 1s linear infinite;
+        }
+
+        .modal-backdrop {
+            backdrop-filter: blur(20px);
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: #007aff;
+            box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+        }
+
+        .tab-close {
+            opacity: 0;
+            transition: opacity 0.15s ease;
+        }
+
+        .tab:hover .tab-close,
+        .tab.active .tab-close {
+            opacity: 1;
+        }
+
+        /* Animações suaves */
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .animate-slide-in {
+            animation: slideIn 0.2s ease-out;
+        }
+
+        .animate-fade-in {
+            animation: fadeIn 0.15s ease-out;
+        }
+
+        /* Barra de progresso de carregamento */
+        .loading-bar {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 2px;
+            background: linear-gradient(90deg, #71717a, #a1a1aa);
+            width: 0%;
+            transition: width 0.3s ease;
+            z-index: 1000;
+        }
+
+        .loading-bar.active {
+            animation: loading 2s ease-in-out infinite;
+        }
+
+        @keyframes loading {
+            0% { width: 0%; }
+            50% { width: 70%; }
+            100% { width: 100%; opacity: 0; }
+        }
+
+        /* Efeito de hover melhorado */
+        .icon-btn {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .icon-btn::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .icon-btn:hover::before {
+            opacity: 1;
+        }
+
+        /* Scrollbar personalizada */
+        * {
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+        }
+
+        /* Seleção de texto */
+        ::selection {
+            background: rgba(113, 113, 122, 0.3);
+            color: inherit;
+        }
+
+        /* Tooltip */
+        [data-tooltip] {
+            position: relative;
+        }
+
+        [data-tooltip]::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%) translateY(-8px);
+            background: #2d2d30;
+            color: #e4e4e7;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        [data-tooltip]:hover::after {
+            opacity: 1;
+            transform: translateX(-50%) translateY(-4px);
+        }
+
+        /* Glassmorphism para modais */
+        .glass-effect {
+            background: rgba(30, 30, 30, 0.8);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+        }
+
+        body.light-theme .glass-effect {
+            background: rgba(255, 255, 255, 0.8);
+        }
+
+        /* Micro-interações */
+        button, .tab, .icon-btn {
+            transform-origin: center;
+        }
+
+        button:active, .icon-btn:active {
+            transform: scale(0.96);
+        }
+
+        /* Indicador de aba ativa melhorado */
+        .tab.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #71717a, transparent);
+            animation: shimmer 2s ease-in-out infinite;
+        }
+
+        @keyframes shimmer {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
+        }
+
+        /* Smooth transitions globais */
+        * {
+            transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* Focus visible para acessibilidade */
+        *:focus-visible {
+            outline: 2px solid #71717a;
+            outline-offset: 2px;
+            border-radius: 4px;
+        }
+
+        /* Placeholder animado */
+        @keyframes placeholderShimmer {
+            0% { background-position: -468px 0; }
+            100% { background-position: 468px 0; }
+        }
+
+        .skeleton {
+            animation: placeholderShimmer 1.2s ease-in-out infinite;
+            background: linear-gradient(to right, #2d2d30 8%, #3e3e42 18%, #2d2d30 33%);
+            background-size: 800px 104px;
+        }
     </style>
+</head>
+<body class="bg-dark-bg text-dark-text h-screen flex flex-col overflow-hidden">
+    <!-- Barra de Título + Abas -->
+    <div class="h-11 bg-dark-bg border-b border-dark-border flex items-center px-3 gap-3">
+        <!-- Botões macOS -->
+        <div class="window-no-drag flex items-center gap-2 flex-shrink-0">
+            <button id="closeBtn" class="w-3 h-3 rounded-full bg-dark-red hover:brightness-110 transition-all"></button>
+            <button id="minimizeBtn" class="w-3 h-3 rounded-full bg-dark-yellow hover:brightness-110 transition-all"></button>
+            <button id="maximizeBtn" class="w-3 h-3 rounded-full bg-dark-green hover:brightness-110 transition-all"></button>
+        </div>
+
+        <!-- Área arrastável -->
+        <div class="window-drag flex-1 h-full flex items-center">
+            <!-- Abas -->
+            <div class="window-no-drag flex items-center gap-0.5 overflow-x-auto" id="tabs"></div>
+        </div>
+
+        <!-- Botão Nova Aba -->
+        <button id="newTabBtn" class="window-no-drag icon-btn w-8 h-8 rounded-md flex items-center justify-center text-dark-secondary flex-shrink-0">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+        </button>
+    </div>
+
+    <!-- Barra de Navegação -->
+    <div class="window-no-drag h-12 bg-dark-surface border-b border-dark-border flex items-center px-3 gap-2">
+        <!-- Controles de Navegação -->
+        <div class="flex items-center gap-0.5">
+            <button id="back" class="icon-btn w-9 h-9 rounded-md flex items-center justify-center text-dark-secondary" disabled data-tooltip="Voltar (Alt+←)">
+                <i data-lucide="chevron-left" class="w-5 h-5"></i>
+            </button>
+            <button id="forward" class="icon-btn w-9 h-9 rounded-md flex items-center justify-center text-dark-secondary" disabled data-tooltip="Avançar (Alt+→)">
+                <i data-lucide="chevron-right" class="w-5 h-5"></i>
+            </button>
+            <button id="reload" class="icon-btn w-9 h-9 rounded-md flex items-center justify-center text-dark-secondary" data-tooltip="Recarregar (Ctrl+R)">
+                <i data-lucide="rotate-cw" class="w-4 h-4"></i>
+            </button>
+        </div>
+
+        <!-- Barra de URL -->
+        <div class="flex-1 flex items-center bg-dark-elevated rounded-lg px-4 py-2 border border-transparent hover:border-dark-accent focus-within:border-dark-accent transition-colors">
+            <i data-lucide="lock" class="w-3.5 h-3.5 text-dark-secondary mr-3"></i>
+            <input 
+                type="text" 
+                id="urlBar" 
+                placeholder="Pesquise ou digite um URL" 
+                class="flex-1 bg-transparent outline-none text-sm text-dark-text placeholder-dark-secondary"
+            >
+        </div>
+
+        <!-- Controles Direita -->
+        <div class="flex items-center gap-0.5">
+            <button id="commandPaletteBtn" class="icon-btn w-9 h-9 rounded-md flex items-center justify-center text-dark-secondary" data-tooltip="Comandos (Ctrl+Shift+P)">
+                <i data-lucide="command" class="w-4 h-4"></i>
+            </button>
+            <button id="bookmark" class="icon-btn w-9 h-9 rounded-md flex items-center justify-center text-dark-secondary" data-tooltip="Favoritos (Ctrl+B)">
+                <i data-lucide="star" class="w-4 h-4"></i>
+            </button>
+            <button id="history" class="icon-btn w-9 h-9 rounded-md flex items-center justify-center text-dark-secondary" data-tooltip="Histórico (Ctrl+H)">
+                <i data-lucide="clock" class="w-4 h-4"></i>
+            </button>
+            <button id="downloads" class="icon-btn w-9 h-9 rounded-md flex items-center justify-center text-dark-secondary" data-tooltip="Downloads (Ctrl+J)">
+                <i data-lucide="download" class="w-4 h-4"></i>
+            </button>
+            <button id="settings" class="icon-btn w-9 h-9 rounded-md flex items-center justify-center text-dark-secondary" data-tooltip="Configurações (Ctrl+,)">
+                <i data-lucide="settings" class="w-4 h-4"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Área de Conteúdo -->
+    <div id="tabsContent" class="flex-1 bg-dark-bg relative">
+        <!-- Barra de progresso de carregamento -->
+        <div id="loadingBar" class="loading-bar"></div>
+    </div>
+
+    <!-- Modal de Configurações -->
+    <div id="settingsOverlay" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-50" onclick="closeModal('settings')">
+        <div class="bg-dark-surface rounded-2xl w-[500px] max-h-[80vh] overflow-hidden shadow-2xl border border-dark-border" onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between p-5 border-b border-dark-border">
+                <h2 class="text-lg font-semibold text-dark-text">Configurações</h2>
+                <button onclick="closeModal('settings')" class="icon-btn w-8 h-8 rounded-md flex items-center justify-center text-dark-secondary">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+            
+            <div class="p-5 space-y-5 overflow-y-auto max-h-[calc(80vh-140px)]">
+                <div>
+                    <label class="block text-sm font-medium text-dark-text mb-2">Tema</label>
+                    <div class="flex gap-2">
+                        <button onclick="setTheme('dark')" id="themeDark" class="flex-1 px-4 py-2 rounded-lg border-2 border-dark-border hover:border-dark-accent transition-all">
+                            <i data-lucide="moon" class="w-4 h-4 mx-auto"></i>
+                            <span class="text-xs mt-1 block">Escuro</span>
+                        </button>
+                        <button onclick="setTheme('light')" id="themeLight" class="flex-1 px-4 py-2 rounded-lg border-2 border-dark-border hover:border-dark-accent transition-all">
+                            <i data-lucide="sun" class="w-4 h-4 mx-auto"></i>
+                            <span class="text-xs mt-1 block">Claro</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-dark-text mb-2">Página Inicial</label>
+                    <input type="text" id="homePageInput" placeholder="https://google.com" 
+                        class="w-full px-3 py-2 bg-dark-elevated border border-dark-border rounded-lg text-sm text-dark-text placeholder-dark-secondary focus:border-dark-accent transition-all">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-dark-text mb-2">Motor de Busca</label>
+                    <select id="searchEngineSelect" 
+                        class="w-full px-3 py-2 bg-dark-elevated border border-dark-border rounded-lg text-sm text-dark-text focus:border-dark-accent transition-all">
+                        <option value="google">Google</option>
+                        <option value="duckduckgo">DuckDuckGo</option>
+                        <option value="bing">Bing</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="p-5 border-t border-dark-border">
+                <button id="saveSettings" class="w-full py-2.5 bg-dark-accent text-white rounded-lg font-medium hover:bg-dark-accent-hover transition-all">
+                    Salvar Configurações
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Favoritos -->
+    <div id="bookmarksOverlay" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-50" onclick="closeModal('bookmarks')">
+        <div class="bg-dark-surface rounded-2xl w-[600px] max-h-[80vh] overflow-hidden shadow-2xl border border-dark-border" onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between p-5 border-b border-dark-border">
+                <h2 class="text-lg font-semibold text-dark-text">Favoritos</h2>
+                <button onclick="closeModal('bookmarks')" class="icon-btn w-8 h-8 rounded-md flex items-center justify-center text-dark-secondary">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Histórico -->
+    <div id="historyOverlay" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-50" onclick="closeModal('history')">
+        <div class="bg-dark-surface rounded-2xl w-[700px] max-h-[80vh] overflow-hidden shadow-2xl border border-dark-border" onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between p-5 border-b border-dark-border">
+                <h2 class="text-lg font-semibold text-dark-text">Histórico</h2>
+                <div class="flex items-center gap-2">
+                    <button onclick="window.historySystem?.clearHistory()" class="icon-btn w-8 h-8 rounded-md flex items-center justify-center text-dark-secondary">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                    <button onclick="closeModal('history')" class="icon-btn w-8 h-8 rounded-md flex items-center justify-center text-dark-secondary">
+                        <i data-lucide="x" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Downloads -->
+    <div id="downloadsOverlay" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-50" onclick="closeModal('downloads')">
+        <div class="bg-dark-surface rounded-2xl w-[600px] max-h-[80vh] overflow-hidden shadow-2xl border border-dark-border" onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between p-5 border-b border-dark-border">
+                <h2 class="text-lg font-semibold text-dark-text">Downloads</h2>
+                <button onclick="closeModal('downloads')" class="icon-btn w-8 h-8 rounded-md flex items-center justify-center text-dark-secondary">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+            <div class="p-5">
+                <p class="text-dark-secondary text-center py-8">Nenhum download</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Funções globais para modais
+        function closeModal(type) {
+            const overlay = document.getElementById(`${type}Overlay`);
+            if (overlay) {
+                overlay.classList.add('hidden');
+                overlay.classList.remove('flex');
+            }
+        }
+
+        function openModal(type) {
+            const overlay = document.getElementById(`${type}Overlay`);
+            if (overlay) {
+                overlay.classList.remove('hidden');
+                overlay.classList.add('flex');
+                if (typeof lucide !== 'undefined') {
+                    lucide.createIcons();
+                }
+            }
+        }
+
+        // Tema
+        function setTheme(theme) {
+            if (theme === 'light') {
+                document.body.classList.add('light-theme');
+            } else {
+                document.body.classList.remove('light-theme');
+            }
+            
+            localStorage.setItem('theme', theme);
+            
+            // Atualizar botões
+            document.getElementById('themeDark').style.borderColor = theme === 'dark' ? '#71717a' : '';
+            document.getElementById('themeLight').style.borderColor = theme === 'light' ? '#71717a' : '';
+            
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
+        }
+
+        // Carregar tema salvo
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        if (savedTheme === 'light') {
+            document.body.classList.add('light-theme');
+        }
+
+        // Aguardar Lucide carregar
+        window.addEventListener('load', () => {
+            console.log('Página carregada');
+            console.log('Lucide disponível:', typeof lucide !== 'undefined');
+            console.log('electronAPI disponível:', !!window.electronAPI);
+            
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+                console.log('Ícones Lucide criados');
+            } else {
+                console.error('Lucide não carregou!');
+            }
+        });
+    </script>
+    <script src="renderer.js"></script>
 </body>
 </html>

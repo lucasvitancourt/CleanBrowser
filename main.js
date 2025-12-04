@@ -34,13 +34,63 @@ class BrowserApp {
     });
   }
 
+  createWindow() {
+    const win = new BrowserWindow({
+      width: 1200,
+      height: 800,
+      minWidth: 800,
+      minHeight: 600,
+      frame: false,
+      titleBarStyle: 'hidden',
+      backgroundColor: '#f5f5f7',
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        preload: path.join(__dirname, 'preload.js'),
+        webviewTag: true
+      }
+    });
+
+    win.loadFile('index.html');
+    this.windows.add(win);
+
+    win.on('closed', () => {
+      this.windows.delete(win);
+    });
+
+    return win;
+  }
+
+  setupWindow(window) {
+    // Configurar eventos da janela
+    ipcMain.on('window-control', (event, action) => {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (!win) return;
+
+      switch (action) {
+        case 'close':
+          win.close();
+          break;
+        case 'minimize':
+          win.minimize();
+          break;
+        case 'maximize':
+          if (win.isMaximized()) {
+            win.unmaximize();
+          } else {
+            win.maximize();
+          }
+          break;
+        case 'fullscreen':
+          win.setFullScreen(!win.isFullScreen());
+          break;
+      }
+    });
+  }
+
   registerShortcuts() {
     globalShortcut.register('CommandOrControl+N', () => {
       this.createWindow();
-    });
-
-    globalShortcut.register('CommandOrControl+Shift+N', () => {
-      this.createIncognitoWindow();
     });
   }
 
